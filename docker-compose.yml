@@ -1,9 +1,13 @@
 services:
     api:
       build: ./app
+      cpus: 1.0
+      mem_limit: 512m
 
     nginx:
         image: nginx:1.29.8
+        cpus: 0.5
+        mem_limit: 128m
         ports:
             - "5555:80"
         volumes:
