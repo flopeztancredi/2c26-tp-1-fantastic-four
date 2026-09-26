@@ -20,70 +20,81 @@
   "links": [],
   "panels": [
     {
-      "aliasColors": {},
+      "aliasColors": {
+        "% éxito": "#7EB26D"
+      },
       "bars": false,
       "dashLength": 10,
       "dashes": false,
       "datasource": "Graphite",
+      "description": "Respuestas 2xx / (todas las respuestas HTTP + errores de red como ETIMEDOUT o ECONNREFUSED), por cada reporte de artillery (10 s). La línea roja marca el umbral acordado (99 %): los escalones debajo de la línea no cuentan como 'disponibles'. Un hueco sin datos = no hubo ninguna respuesta ni error en esa ventana.",
       "fieldConfig": {
         "defaults": {
           "custom": {}
         },
         "overrides": []
       },
-      "fill": 7,
+      "fill": 1,
       "fillGradient": 0,
       "gridPos": {
-        "h": 7,
+        "h": 8,
         "w": 24,
         "x": 0,
         "y": 0
       },
-      "height": "250px",
       "hiddenSeries": false,
-      "id": 4,
+      "id": 10,
       "legend": {
         "alignAsTable": true,
         "avg": true,
         "current": true,
         "hideEmpty": true,
+        "hideZero": false,
         "max": true,
-        "min": false,
+        "min": true,
         "rightSide": true,
         "show": true,
-        "sideWidth": 250,
+        "sideWidth": 260,
         "total": false,
         "values": true
       },
       "lines": true,
-      "linewidth": 1,
+      "linewidth": 2,
       "links": [],
-      "nullPointMode": "connected",
+      "nullPointMode": "null",
       "options": {
         "alertThreshold": true
       },
       "percentage": false,
       "pluginVersion": "7.3.10",
-      "pointradius": 5,
+      "pointradius": 3,
       "points": true,
       "renderer": "flot",
       "seriesOverrides": [],
       "spaceLength": 10,
-      "stack": true,
+      "stack": false,
       "steppedLine": false,
       "targets": [
         {
-          "refCount": 0,
-          "refId": "B",
-          "target": "aliasByMetric(stats.gauges.$server.scenarioCounts.*)",
-          "textEditor": false
+          "refId": "A",
+          "target": "alias(asPercent(sumSeries(stats.gauges.$server.codes.2*, scale(stats.gauges.$server.scenariosCreated, 0)), sumSeries(stats.gauges.$server.codes.*, stats.gauges.$server.errors.*)), '% éxito')",
+          "textEditor": true
         }
       ],
-      "thresholds": [],
+      "thresholds": [
+        {
+          "colorMode": "critical",
+          "fill": true,
+          "line": true,
+          "op": "lt",
+          "value": 99,
+          "yaxis": "left"
+        }
+      ],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Scenarios launched (stacked)",
+      "title": "Disponibilidad: % de éxito por ventana de 10 s",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -99,11 +110,11 @@
       },
       "yaxes": [
         {
-          "format": "rps",
-          "label": "",
+          "format": "percent",
+          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
+          "max": 100,
+          "min": 0,
           "show": true
         },
         {
@@ -111,7 +122,7 @@
           "label": null,
           "logBase": 1,
           "max": null,
-          "min": null,
+          "min": 0,
           "show": true
         }
       ],
@@ -122,129 +133,14 @@
     },
     {
       "aliasColors": {
-        "Completed": "#7EB26D",
-        "Errored": "#BF1B00",
-        "Errors count": "#BF1B00",
-        "Pending": "#447EBC",
-        "Requests completed": "#7EB26D",
-        "Limited": "#FDDA0D"
+        "Carga ofrecida": "#8AB8FF",
+        "Throughput 2xx": "#7EB26D"
       },
       "bars": false,
       "dashLength": 10,
       "dashes": false,
       "datasource": "Graphite",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      },
-      "fill": 7,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 7,
-        "w": 24,
-        "x": 0,
-        "y": 7
-      },
-      "height": "250",
-      "hiddenSeries": false,
-      "id": 5,
-      "legend": {
-        "alignAsTable": true,
-        "avg": true,
-        "current": true,
-        "hideEmpty": false,
-        "max": true,
-        "min": false,
-        "rightSide": true,
-        "show": true,
-        "sideWidth": 250,
-        "total": false,
-        "values": true
-      },
-      "lines": true,
-      "linewidth": 1,
-      "links": [],
-      "nullPointMode": "connected",
-      "options": {
-        "alertThreshold": true
-      },
-      "percentage": false,
-      "pluginVersion": "7.3.10",
-      "pointradius": 5,
-      "points": true,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": true,
-      "steppedLine": false,
-      "targets": [
-        {
-          "refId": "B",
-          "target": "alias(sumSeries(stats.gauges.$server.errors.*), 'Errored')",
-          "textEditor": true
-        },
-        {
-          "refId": "A",
-          "target": "alias(stats.gauges.$server.codes.200, 'Completed')"
-        },
-        {
-          "refId": "C",
-          "target": "alias(stats.gauges.$server.pendingRequests, 'Pending')"
-        },
-        {
-          "refId": "D",
-          "target": "alias(stats.gauges.$server.codes.429, 'Limited')"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "Requests state (stacked)",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        },
-        {
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": "Graphite",
+      "description": "Carga ofrecida = usuarios virtuales creados por segundo (cada uno hace 1 request). Throughput = respuestas 2xx por segundo. Mientras las dos líneas coinciden, el sistema atiende todo lo que recibe; donde el throughput se aplana o cae, se alcanzó la capacity (throughput máximo).",
       "fieldConfig": {
         "defaults": {
           "custom": {}
@@ -257,11 +153,10 @@
         "h": 7,
         "w": 24,
         "x": 0,
-        "y": 14
+        "y": 8
       },
-      "height": "250px",
       "hiddenSeries": false,
-      "id": 3,
+      "id": 11,
       "legend": {
         "alignAsTable": true,
         "avg": true,
@@ -269,23 +164,23 @@
         "hideEmpty": true,
         "hideZero": false,
         "max": true,
-        "min": false,
+        "min": true,
         "rightSide": true,
         "show": true,
-        "sideWidth": 250,
+        "sideWidth": 260,
         "total": false,
         "values": true
       },
       "lines": true,
-      "linewidth": 1,
+      "linewidth": 2,
       "links": [],
-      "nullPointMode": "connected",
+      "nullPointMode": "null",
       "options": {
         "alertThreshold": true
       },
       "percentage": false,
       "pluginVersion": "7.3.10",
-      "pointradius": 5,
+      "pointradius": 3,
       "points": true,
       "renderer": "flot",
       "seriesOverrides": [],
@@ -294,21 +189,259 @@
       "steppedLine": false,
       "targets": [
         {
-          "refCount": 0,
-          "refId": "C",
-          "target": "alias(stats.gauges.$server.scenarioDuration.max, 'Upper')"
+          "refId": "A",
+          "target": "alias(scale(stats.gauges.$server.scenariosCreated, 0.1), 'Carga ofrecida')",
+          "textEditor": true
         },
         {
-          "refCount": 0,
           "refId": "B",
-          "target": "alias(stats.gauges.$server.scenarioDuration.median, 'Median')"
+          "target": "alias(scale(sumSeries(stats.gauges.$server.codes.2*), 0.1), 'Throughput 2xx')",
+          "textEditor": true
         }
       ],
       "thresholds": [],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Response time (client-side)",
+      "title": "Carga ofrecida vs. throughput 2xx (req/s)",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "reqps",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": 0,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": 0,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {
+        "HTTP 200": "#7EB26D",
+        "HTTP 201": "#629E51",
+        "HTTP 429": "#FDDA0D",
+        "HTTP 500": "#890F02",
+        "HTTP 502": "#E24D42",
+        "HTTP 503": "#EF843C",
+        "HTTP 504": "#BA43A9",
+        "error ETIMEDOUT": "#6D1F62",
+        "error ECONNREFUSED": "#BF1B00",
+        "error ECONNRESET": "#F9934E"
+      },
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "Graphite",
+      "description": "Cantidad de respuestas por ventana de 10 s, separadas por código HTTP y por tipo de error de red. Lectura del tipo de falla: HTTP 502 rápidos = nginx no puede conectar con api (api caído, crash). error ETIMEDOUT = el request no obtuvo respuesta en 10 s (api vivo pero saturado: omission). HTTP 200 con P95 alto (panel de latencia) = timing. HTTP 500 = error de la aplicación (ojo: 'Not enough funds' también devuelve 500).",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "fill": 6,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 15
+      },
+      "hiddenSeries": false,
+      "id": 12,
+      "legend": {
+        "alignAsTable": true,
+        "avg": true,
+        "current": true,
+        "hideEmpty": true,
+        "hideZero": false,
+        "max": true,
+        "min": true,
+        "rightSide": true,
+        "show": true,
+        "sideWidth": 260,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 2,
+      "links": [],
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "7.3.10",
+      "pointradius": 3,
+      "points": true,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": true,
+      "steppedLine": false,
+      "targets": [
+        {
+          "refId": "A",
+          "target": "aliasSub(aliasByNode(stats.gauges.$server.codes.*, 4), '^', 'HTTP ')",
+          "textEditor": true
+        },
+        {
+          "refId": "B",
+          "target": "aliasSub(aliasByNode(stats.gauges.$server.errors.*, 4), '^', 'error ')",
+          "textEditor": true
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Resultado de los requests por ventana: códigos HTTP y errores (apilado)",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": 0,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {
+        "Mediana": "#7EB26D",
+        "P95": "#EAB839",
+        "P99": "#EF843C",
+        "Máx": "#E24D42"
+      },
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "Graphite",
+      "description": "Latencia por request medida por artillery en cada ventana de 10 s. El P95 es la métrica que se usa en la guía de ejercicios (ej. 11). Referencia: cada POST /exchange espera 2 transferencias simuladas de 200-400 ms, así que el piso esperable ronda 400-800 ms. Requests cortados por timeout (10 s) no entran acá: se ven como ETIMEDOUT en el panel anterior.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 23
+      },
+      "hiddenSeries": false,
+      "id": 13,
+      "legend": {
+        "alignAsTable": true,
+        "avg": true,
+        "current": true,
+        "hideEmpty": true,
+        "hideZero": false,
+        "max": true,
+        "min": true,
+        "rightSide": true,
+        "show": true,
+        "sideWidth": 260,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 2,
+      "links": [],
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "7.3.10",
+      "pointradius": 3,
+      "points": true,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "refId": "A",
+          "target": "alias(stats.gauges.$server.latency.median, 'Mediana')",
+          "textEditor": true
+        },
+        {
+          "refId": "B",
+          "target": "alias(stats.gauges.$server.latency.p95, 'P95')",
+          "textEditor": true
+        },
+        {
+          "refId": "C",
+          "target": "alias(stats.gauges.$server.latency.p99, 'P99')",
+          "textEditor": true
+        },
+        {
+          "refId": "D",
+          "target": "alias(stats.gauges.$server.latency.max, 'Máx')",
+          "textEditor": true
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Tiempo de respuesta del lado cliente: mediana, P95, P99, máximo",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -325,10 +458,10 @@
       "yaxes": [
         {
           "format": "ms",
-          "label": "",
+          "label": null,
           "logBase": 1,
           "max": null,
-          "min": "0",
+          "min": 0,
           "show": true
         },
         {
@@ -336,7 +469,7 @@
           "label": null,
           "logBase": 1,
           "max": null,
-          "min": null,
+          "min": 0,
           "show": true
         }
       ],
@@ -346,13 +479,12 @@
       }
     },
     {
-      "aliasColors": {
-        "Memory": "#EAB839"
-      },
+      "aliasColors": {},
       "bars": false,
       "dashLength": 10,
       "dashes": false,
       "datasource": "Graphite",
+      "description": "Cada container se mide contra SU propio límite del docker-compose.yml: api contra cpus: 1.0 (1 core por réplica) y nginx contra cpus: 0.5 (medio core). 100 % = el container usa todo lo que Docker le permite: a partir de ahí Docker lo frena (throttling) y la latencia sube. Si se cambian los límites en el compose, hay que actualizar los divisores de este panel.",
       "fieldConfig": {
         "defaults": {
           "custom": {}
@@ -362,15 +494,13 @@
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
-        "h": 7,
-        "w": 24,
+        "h": 8,
+        "w": 12,
         "x": 0,
-        "y": 21
+        "y": 30
       },
-      "height": "250px",
       "hiddenSeries": false,
-      "hideTimeOverride": false,
-      "id": 1,
+      "id": 16,
       "legend": {
         "alignAsTable": true,
         "avg": true,
@@ -378,54 +508,55 @@
         "hideEmpty": true,
         "hideZero": false,
         "max": true,
-        "min": false,
-        "rightSide": true,
+        "min": true,
+        "rightSide": false,
         "show": true,
-        "sideWidth": 250,
+        "sideWidth": 260,
         "total": false,
         "values": true
       },
       "lines": true,
-      "linewidth": 1,
+      "linewidth": 2,
       "links": [],
-      "nullPointMode": "connected",
+      "nullPointMode": "null",
       "options": {
         "alertThreshold": true
       },
       "percentage": false,
       "pluginVersion": "7.3.10",
-      "pointradius": 5,
+      "pointradius": 3,
       "points": true,
       "renderer": "flot",
-      "seriesOverrides": [
-        {
-          "alias": "asPercent(stats.gauges.cadvisor.exchange-api-1.memory_usage, 34359738368)",
-          "yaxis": 1
-        }
-      ],
+      "seriesOverrides": [],
       "spaceLength": 10,
       "stack": false,
       "steppedLine": false,
       "targets": [
         {
-          "hide": false,
-          "refCount": 0,
-          "refId": "C",
-          "target": "alias(removeBelowValue(asPercent(derivative(keepLastValue(stats.gauges.cadvisor.$container.cpu_cumulative_usage, 100)), 10000000000), 0.0001), 'CPU')",
-          "textEditor": false
+          "refId": "A",
+          "textEditor": true,
+          "target": "aliasSub(aliasByNode(removeBelowValue(asPercent(derivative(keepLastValue(stats.gauges.cadvisor.exchange-api-*.cpu_cumulative_usage, 100)), 10000000000), 0.0001), 3), '$', ' (límite 1.0 cpu)')"
         },
         {
-          "hide": false,
-          "refCount": 0,
           "refId": "B",
-          "target": "alias(asPercent(stats.gauges.cadvisor.$container.memory_working_set, 34359738368), 'Memory')"
+          "textEditor": true,
+          "target": "aliasSub(aliasByNode(removeBelowValue(asPercent(derivative(keepLastValue(stats.gauges.cadvisor.exchange-nginx-1.cpu_cumulative_usage, 100)), 5000000000), 0.0001), 3), '$', ' (límite 0.5 cpu)')"
         }
       ],
-      "thresholds": [],
+      "thresholds": [
+        {
+          "colorMode": "critical",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 100,
+          "yaxis": "left"
+        }
+      ],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Resources",
+      "title": "CPU: % del límite del compose (100 % = límite alcanzado)",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -445,15 +576,366 @@
           "label": null,
           "logBase": 1,
           "max": null,
-          "min": "0",
+          "min": 0,
           "show": true
         },
         {
-          "format": "Bps",
+          "format": "short",
           "label": null,
           "logBase": 1,
           "max": null,
-          "min": null,
+          "min": 0,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "Graphite",
+      "description": "Cada container contra SU mem_limit del docker-compose.yml: api contra 512 MiB (por réplica) y nginx contra 128 MiB. Si llega al 100 %, el kernel mata el container (OOM kill) y, como el compose no declara 'restart:', no vuelve solo. Si se cambian los límites en el compose, hay que actualizar los divisores de este panel.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 30
+      },
+      "hiddenSeries": false,
+      "id": 17,
+      "legend": {
+        "alignAsTable": true,
+        "avg": true,
+        "current": true,
+        "hideEmpty": true,
+        "hideZero": false,
+        "max": true,
+        "min": true,
+        "rightSide": false,
+        "show": true,
+        "sideWidth": 260,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 2,
+      "links": [],
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "7.3.10",
+      "pointradius": 3,
+      "points": true,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "refId": "A",
+          "textEditor": true,
+          "target": "aliasSub(aliasByNode(asPercent(stats.gauges.cadvisor.exchange-api-*.memory_working_set, 536870912), 3), '$', ' (límite 512 MiB)')"
+        },
+        {
+          "refId": "B",
+          "textEditor": true,
+          "target": "aliasSub(aliasByNode(asPercent(stats.gauges.cadvisor.exchange-nginx-1.memory_working_set, 134217728), 3), '$', ' (límite 128 MiB)')"
+        }
+      ],
+      "thresholds": [
+        {
+          "colorMode": "critical",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 100,
+          "yaxis": "left"
+        }
+      ],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Memoria: % del límite del compose (100 % = OOM kill)",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "percent",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": 0,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": 0,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "Graphite",
+      "description": "Uso de CPU en valor absoluto (100 % = 1 core). Sirve para cualquier container de la variable 'Containers', incluidos los que no tienen límite. Líneas de referencia: 100 % = límite de api (cpus 1.0), 50 % = límite de nginx (cpus 0.5).",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 38
+      },
+      "hiddenSeries": false,
+      "id": 14,
+      "legend": {
+        "alignAsTable": true,
+        "avg": true,
+        "current": true,
+        "hideEmpty": true,
+        "hideZero": false,
+        "max": true,
+        "min": true,
+        "rightSide": false,
+        "show": true,
+        "sideWidth": 260,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 2,
+      "links": [],
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "7.3.10",
+      "pointradius": 3,
+      "points": true,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "refId": "A",
+          "target": "aliasByNode(removeBelowValue(asPercent(derivative(keepLastValue(stats.gauges.cadvisor.$container.cpu_cumulative_usage, 100)), 10000000000), 0.0001), 3)",
+          "textEditor": true
+        }
+      ],
+      "thresholds": [
+        {
+          "colorMode": "critical",
+          "fill": false,
+          "line": true,
+          "op": "gt",
+          "value": 100,
+          "yaxis": "left"
+        },
+        {
+          "colorMode": "warning",
+          "fill": false,
+          "line": true,
+          "op": "gt",
+          "value": 50,
+          "yaxis": "left"
+        }
+      ],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "CPU por container, valor absoluto (% de 1 core)",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "percent",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": 0,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": 0,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "Graphite",
+      "description": "Memoria en uso en bytes, para cualquier container de la variable 'Containers'. Líneas de referencia: 512 MiB = mem_limit de api, 128 MiB = mem_limit de nginx. graphite, grafana y cadvisor no tienen límite en el compose.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 38
+      },
+      "hiddenSeries": false,
+      "id": 15,
+      "legend": {
+        "alignAsTable": true,
+        "avg": true,
+        "current": true,
+        "hideEmpty": true,
+        "hideZero": false,
+        "max": true,
+        "min": true,
+        "rightSide": false,
+        "show": true,
+        "sideWidth": 260,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 2,
+      "links": [],
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "7.3.10",
+      "pointradius": 3,
+      "points": true,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "refId": "A",
+          "target": "aliasByNode(stats.gauges.cadvisor.$container.memory_working_set, 3)",
+          "textEditor": true
+        }
+      ],
+      "thresholds": [
+        {
+          "colorMode": "critical",
+          "fill": false,
+          "line": true,
+          "op": "gt",
+          "value": 536870912,
+          "yaxis": "left"
+        },
+        {
+          "colorMode": "warning",
+          "fill": false,
+          "line": true,
+          "op": "gt",
+          "value": 134217728,
+          "yaxis": "left"
+        }
+      ],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Memoria por container, valor absoluto (working set)",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "bytes",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": 0,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": 0,
           "show": true
         }
       ],
@@ -463,7 +945,7 @@
       }
     }
   ],
-  "refresh": "5s",
+  "refresh": "10s",
   "schemaVersion": 26,
   "style": "dark",
   "tags": [],
@@ -472,39 +954,62 @@
       {
         "allValue": null,
         "current": {
-          "selected": false,
-          "text": "artillery-api",
-          "value": "artillery-api"
+          "selected": true,
+          "text": "artillery-exchange-breakpoint",
+          "value": "artillery-exchange-breakpoint"
         },
+        "description": "Prefijo statsd del YAML de artillery que se está mirando.",
         "error": null,
         "hide": 0,
         "includeAll": false,
-        "label": null,
+        "label": "Corrida (prefijo)",
         "multi": false,
         "name": "server",
         "options": [
           {
             "selected": true,
+            "text": "artillery-exchange-breakpoint",
+            "value": "artillery-exchange-breakpoint"
+          },
+          {
+            "selected": false,
+            "text": "artillery-exchange-stress",
+            "value": "artillery-exchange-stress"
+          },
+          {
+            "selected": false,
             "text": "artillery-api",
             "value": "artillery-api"
+          },
+          {
+            "selected": false,
+            "text": "artillery-exchange-race",
+            "value": "artillery-exchange-race"
           }
         ],
-        "query": "artillery-api",
+        "query": "artillery-exchange-breakpoint,artillery-exchange-stress,artillery-api,artillery-exchange-race",
         "skipUrlSync": false,
         "type": "custom"
       },
       {
         "allValue": null,
         "current": {
-          "selected": false,
-          "text": "exchange-api-1",
-          "value": "exchange-api-1"
+          "selected": true,
+          "text": [
+            "exchange-api-1",
+            "exchange-nginx-1"
+          ],
+          "value": [
+            "exchange-api-1",
+            "exchange-nginx-1"
+          ]
         },
+        "description": "Containers a mostrar en CPU y memoria. Con --scale api=N, seleccioná todas las réplicas exchange-api-*.",
         "error": null,
         "hide": 0,
         "includeAll": false,
-        "label": null,
-        "multi": false,
+        "label": "Containers",
+        "multi": true,
         "name": "container",
         "options": [
           {
@@ -523,6 +1028,11 @@
             "value": "exchange-api-3"
           },
           {
+            "selected": true,
+            "text": "exchange-nginx-1",
+            "value": "exchange-nginx-1"
+          },
+          {
             "selected": false,
             "text": "exchange-cadvisor-1",
             "value": "exchange-cadvisor-1"
@@ -536,14 +1046,9 @@
             "selected": false,
             "text": "exchange-graphite-1",
             "value": "exchange-graphite-1"
-          },
-          {
-            "selected": false,
-            "text": "exchange-nginx-1",
-            "value": "exchange-nginx-1"
           }
         ],
-        "query": "exchange-api-1, exchange-api-2, exchange-api-3, exchange-cadvisor-1, exchange-grafana-1, exchange-graphite-1,  exchange-nginx-1, exchange_bbox_1",
+        "query": "exchange-api-1,exchange-api-2,exchange-api-3,exchange-nginx-1,exchange-cadvisor-1,exchange-grafana-1,exchange-graphite-1",
         "queryValue": "",
         "skipUrlSync": false,
         "type": "custom"
@@ -551,7 +1056,7 @@
     ]
   },
   "time": {
-    "from": "now-3m",
+    "from": "now-15m",
     "to": "now"
   },
   "timepicker": {
@@ -567,10 +1072,20 @@
       "2h",
       "1d"
     ],
-    "time_options": ["5m", "15m", "1h", "6h", "12h", "24h", "2d", "7d", "30d"]
+    "time_options": [
+      "5m",
+      "15m",
+      "1h",
+      "6h",
+      "12h",
+      "24h",
+      "2d",
+      "7d",
+      "30d"
+    ]
   },
   "timezone": "",
-  "title": "Main dashboard",
+  "title": "arVault - Availability & Performance",
   "uid": "arxIPammk",
-  "version": 3
+  "version": 4
 }

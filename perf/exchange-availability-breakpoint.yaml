@@ -1,0 +1,83 @@
+# ============================================================================
+# Corrida 1 — BREAKPOINT (Niveles 0, 2 y 3)
+# QA: availability (y performance: capacity / load sensitivity)
+#
+# Objetivo: subir la carga en escalones fijos hasta que el sistema deje de
+# atender bien, para encontrar el boundary de disponibilidad.
+#
+# Ejecutar desde perf/:   npm run scenario exchange-availability-breakpoint api
+# Dashboard: variable $server = artillery-exchange-breakpoint
+#
+# Cada usuario virtual hace UN solo request, así que arrivalRate ≈ req/s.
+# Cada escalón dura 60 s para tener suficientes requests por escalón
+# (a 10 req/s son 600 requests: con umbral 99 % se toleran 6 fallas).
+# ============================================================================
+config:
+  environments:
+    api:
+      target: 'http://localhost:5555'
+      plugins:
+        statsd:
+          host: localhost
+          port: 8125
+          prefix: "artillery-exchange-breakpoint"
+
+  http:
+    # Explícito para el informe: si una respuesta tarda más de 10 s,
+    # artillery la corta y la cuenta como error ETIMEDOUT (omission).
+    timeout: 10
+
+  phases:
+    - name: "Calentamiento 5 req/s"
+      duration: 30
+      arrivalRate: 5
+    - name: "Escalon 10 req/s"
+      duration: 60
+      arrivalRate: 10
+    - name: "Escalon 20 req/s"
+      duration: 60
+      arrivalRate: 20
+    - name: "Escalon 40 req/s"
+      duration: 60
+      arrivalRate: 40
+    - name: "Escalon 80 req/s"
+      duration: 60
+      arrivalRate: 80
+    - name: "Escalon 160 req/s"
+      duration: 60
+      arrivalRate: 160
+    - name: "Escalon 320 req/s"
+      duration: 60
+      arrivalRate: 320
+    - name: "Escalon 640 req/s"
+      duration: 60
+      arrivalRate: 640
+
+# Escenario: la operación central del negocio (POST /exchange), en las dos
+# direcciones ARS<->USD y con montos chicos. Así los saldos internos no se
+# agotan durante la prueba: con saldo insuficiente la api responde HTTP 500
+# ("Not enough funds"), que es una regla de negocio y ensuciaría la medición
+# de disponibilidad.
+scenarios:
+  - name: "Exchange ARS -> USD"
+    weight: 1
+    flow:
+      - post:
+          url: '/exchange'
+          json:
+            baseCurrency: "ARS"
+            counterCurrency: "USD"
+            baseAmount: 1000
+            baseAccountId: 101
+            counterAccountId: 102
+  - name: "Exchange USD -> ARS"
+    weight: 1
+    flow:
+      - post:
+          url: '/exchange'
+          json:
+            baseCurrency: "USD"
+            counterCurrency: "ARS"
+            baseAmount: 1
+            baseAccountId: 102
+            counterAccountId: 101

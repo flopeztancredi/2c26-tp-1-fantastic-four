@@ -1,0 +1,73 @@
+# ============================================================================
+# Corrida 2 — STRESS + RECUPERACIÓN (Niveles 1 y 4)
+# QA: availability (recuperación / MTTR observado)
+#
+# Valores de arrivalRate calculados con el boundary B obtenido en la corrida 1
+# (último escalón con % de éxito >= umbral), medido el 2026-09-25.
+# Ver perf/RESULTADOS_availability_breakpoint.md.
+# Valores reales con B = 160 req/s:
+#   0.5 x B =  80 req/s  -> carga "sana" (línea base y fase de recuperación)
+#   1.5 x B = 240 req/s  -> sobrecarga
+#   1.0 x B = 160 req/s  -> verificación de recuperación completa
+#
+# Ejecutar desde perf/:   npm run scenario exchange-availability-stress api
+# Dashboard: variable $server = artillery-exchange-stress
+# En paralelo, en otra terminal:  docker events --filter container=exchange-api-1
+# ============================================================================
+config:
+  environments:
+    api:
+      target: 'http://localhost:5555'
+      plugins:
+        statsd:
+          host: localhost
+          port: 8125
+          prefix: "artillery-exchange-stress"
+
+  http:
+    timeout: 10
+
+  phases:
+    # 1. Línea base: P95 y % de éxito "sanos", para comparar al final.
+    - name: "Linea base 0.5B"
+      duration: 60
+      arrivalRate: 80
+    # 2. Sobrecarga: ¿el sistema degrada o colapsa? ¿qué tipo de falla aparece?
+    - name: "Sobrecarga 1.5B"
+      duration: 60
+      arrivalRate: 240
+    # 3. Recuperación: se retira el estrés pero se sigue midiendo con carga sana.
+    #    Tiempo de recuperación = desde el inicio de esta fase hasta 3 ventanas
+    #    seguidas con % de éxito >= umbral. Tope (RTO) = 180 s; si no vuelve,
+    #    el resultado es "no se recuperó".
+    - name: "Recuperacion 0.5B (tope RTO 180 s)"
+      duration: 180
+      arrivalRate: 80
+    # 4. Verificación: volver al boundary y comparar el P95 con el de la corrida 1.
+    - name: "Verificacion 1.0B"
+      duration: 60
+      arrivalRate: 160
+
+scenarios:
+  - name: "Exchange ARS -> USD"
+    weight: 1
+    flow:
+      - post:
+          url: '/exchange'
+          json:
+            baseCurrency: "ARS"
+            counterCurrency: "USD"
+            baseAmount: 1000
+            baseAccountId: 101
+            counterAccountId: 102
+  - name: "Exchange USD -> ARS"
+    weight: 1
+    flow:
+      - post:
+          url: '/exchange'
+          json:
+            baseCurrency: "USD"
+            counterCurrency: "ARS"
+            baseAmount: 1
+            baseAccountId: 102
+            counterAccountId: 101
