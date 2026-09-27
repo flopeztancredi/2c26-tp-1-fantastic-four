@@ -985,9 +985,19 @@
             "selected": false,
             "text": "artillery-exchange-race",
             "value": "artillery-exchange-race"
+          },
+          {
+            "selected": false,
+            "text": "artillery-exchange-breakpoint-docker",
+            "value": "artillery-exchange-breakpoint-docker"
+          },
+          {
+            "selected": false,
+            "text": "artillery-exchange-stress-docker",
+            "value": "artillery-exchange-stress-docker"
           }
         ],
-        "query": "artillery-exchange-breakpoint,artillery-exchange-stress,artillery-api,artillery-exchange-race",
+        "query": "artillery-exchange-breakpoint,artillery-exchange-stress,artillery-api,artillery-exchange-race,artillery-exchange-breakpoint-docker,artillery-exchange-stress-docker",
         "skipUrlSync": false,
         "type": "custom"
       },
@@ -1046,9 +1056,14 @@
             "selected": false,
             "text": "exchange-graphite-1",
             "value": "exchange-graphite-1"
+          },
+          {
+            "selected": false,
+            "text": "artillery",
+            "value": "artillery"
           }
         ],
-        "query": "exchange-api-1,exchange-api-2,exchange-api-3,exchange-nginx-1,exchange-cadvisor-1,exchange-grafana-1,exchange-graphite-1",
+        "query": "exchange-api-1,exchange-api-2,exchange-api-3,exchange-nginx-1,exchange-cadvisor-1,exchange-grafana-1,exchange-graphite-1,artillery",
         "queryValue": "",
         "skipUrlSync": false,
         "type": "custom"

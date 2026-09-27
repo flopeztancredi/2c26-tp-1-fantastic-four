@@ -2,20 +2,20 @@
 # Corrida 2 — STRESS + RECUPERACIÓN (Niveles 1 y 4)
 # QA: availability (recuperación / MTTR observado)
 #
-# Valores de arrivalRate calculados con el boundary B obtenido en la corrida 1
-# (último escalón con % de éxito >= umbral), medido el 2026-09-25.
-# Ver perf/RESULTADOS_availability_breakpoint.md.
-# Valores reales con B = 160 req/s:
-#   0.5 x B =  80 req/s  -> carga "sana" (línea base y fase de recuperación)
-#   1.5 x B = 240 req/s  -> sobrecarga
-#   1.0 x B = 160 req/s  -> verificación de recuperación completa
+# Los arrivalRate salen del boundary B de la corrida 1 (último escalón con
+# % de éxito >= 99 %), medido EN EL MISMO ENTORNO en el que se corre esto:
+#   0.5 x B -> carga "sana" (línea base y fase de recuperación)
+#   1.5 x B -> sobrecarga
+#   1.0 x B -> verificación de recuperación completa
+# PENDIENTE: los valores de abajo son de B = 160 req/s (corrida del 25/09),
+# que quedó invalidado. Reemplazarlos antes de correr (ver GUIA_stress-recuperacion.md).
 #
-# Ejecutar desde perf/:   npm run scenario exchange-availability-stress api
-# Dashboard: variable $server = artillery-exchange-stress
-# En paralelo, en otra terminal:  docker events --filter container=exchange-api-1
+# Guía paso a paso: perf/GUIA_stress-recuperacion.md
+# Dashboard: variable $server = prefijo del entorno usado (ver abajo)
 # ============================================================================
 config:
   environments:
+    # Artillery en el host (Linux nativo).
     api:
       target: 'http://localhost:5555'
       plugins:
@@ -23,6 +23,14 @@ config:
           host: localhost
           port: 8125
           prefix: "artillery-exchange-stress"
+    # Artillery en un container dentro de la red de compose (Windows).
+    docker:
+      target: 'http://nginx'
+      plugins:
+        statsd:
+          host: graphite
+          port: 8125
+          prefix: "artillery-exchange-stress-docker"
 
   http:
     timeout: 10
