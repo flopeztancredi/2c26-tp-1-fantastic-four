@@ -995,9 +995,19 @@
             "selected": false,
             "text": "artillery-exchange-stress-docker",
             "value": "artillery-exchange-stress-docker"
+          },
+          {
+            "selected": false,
+            "text": "artillery-exchange-stress-b450",
+            "value": "artillery-exchange-stress-b450"
+          },
+          {
+            "selected": false,
+            "text": "artillery-exchange-stress-b450-docker",
+            "value": "artillery-exchange-stress-b450-docker"
           }
         ],
-        "query": "artillery-exchange-breakpoint,artillery-exchange-stress,artillery-api,artillery-exchange-race,artillery-exchange-breakpoint-docker,artillery-exchange-stress-docker",
+        "query": "artillery-exchange-breakpoint,artillery-exchange-stress,artillery-api,artillery-exchange-race,artillery-exchange-breakpoint-docker,artillery-exchange-stress-docker,artillery-exchange-stress-b450,artillery-exchange-stress-b450-docker",
         "skipUrlSync": false,
         "type": "custom"
       },

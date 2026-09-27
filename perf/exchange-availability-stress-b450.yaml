@@ -1,65 +1,38 @@
-# ============================================================================
-# Corrida 2 — STRESS + RECUPERACIÓN (Niveles 1 y 4)
-# QA: availability (recuperación / MTTR observado)
-#
-# Los arrivalRate salen del boundary B de la corrida 1 (último escalón con
-# % de éxito >= 99 %), medido EN EL MISMO ENTORNO en el que se corre esto:
-#   0.5 x B -> carga "sana" (línea base y fase de recuperación)
-#   1.5 x B -> sobrecarga
-#   1.0 x B -> verificación de recuperación completa
-# PENDIENTE: los valores de abajo son de B = 160 req/s (corrida del 25/09),
-# que quedó invalidado. Reemplazarlos antes de correr (ver GUIA_stress-recuperacion.md).
-#
-# Guía paso a paso: perf/GUIA_stress-recuperacion.md
-# Dashboard: variable $server = prefijo del entorno usado (ver abajo)
-# ============================================================================
+# Corrida 2, variante B = 450 (hipotesis, no medida por breakpoint). Ver README.md.
 config:
   environments:
-    # Artillery en el host (Linux nativo).
     api:
       target: 'http://localhost:5555'
       plugins:
         statsd:
           host: localhost
           port: 8125
-          prefix: "artillery-exchange-stress"
-    # Artillery en un container dentro de la red de compose (Windows).
+          prefix: "artillery-exchange-stress-b450"
     docker:
       target: 'http://nginx'
       plugins:
         statsd:
           host: graphite
           port: 8125
-          prefix: "artillery-exchange-stress-docker"
+          prefix: "artillery-exchange-stress-b450-docker"
 
   http:
     timeout: 10
 
-  # B = 450 req/s: hipotesis, NO medido por breakpoint (la corrida del 26/09
-  # con estado recien reseteado aguanto 480 req/s al 100 %).
-  # La linea base queda en 320 = B del breakpoint de Windows.
   phases:
-    # 1. Línea base: P95 y % de éxito "sanos", para comparar al final.
     - name: "Linea base 320"
       duration: 60
       arrivalRate: 320
-    # 2. Rampa hasta la sobrecarga (320 -> 1.5B = 675).
     - name: "Rampa 320 -> 1.5B"
       duration: 30
       arrivalRate: 320
       rampTo: 675
-    # 3. Sobrecarga: ¿el sistema degrada o colapsa? ¿qué tipo de falla aparece?
     - name: "Sobrecarga 1.5B (675)"
       duration: 60
       arrivalRate: 675
-    # 4. Recuperación: se retira el estrés pero se sigue midiendo con carga sana.
-    #    Tiempo de recuperación = desde el inicio de esta fase hasta 3 ventanas
-    #    seguidas con % de éxito >= umbral. Tope (RTO) = 180 s; si no vuelve,
-    #    el resultado es "no se recuperó".
     - name: "Recuperacion 0.5B (225, tope RTO 180 s)"
       duration: 180
       arrivalRate: 225
-    # 5. Verificación: volver a B y comparar el P95 con la línea base.
     - name: "Verificacion 1.0B (450)"
       duration: 60
       arrivalRate: 450

@@ -1,21 +1,6 @@
-# ============================================================================
-# Corrida 2 — STRESS + RECUPERACIÓN (Niveles 1 y 4)
-# QA: availability (recuperación / MTTR observado)
-#
-# Los arrivalRate salen del boundary B de la corrida 1 (último escalón con
-# % de éxito >= 99 %), medido EN EL MISMO ENTORNO en el que se corre esto:
-#   0.5 x B -> carga "sana" (línea base y fase de recuperación)
-#   1.5 x B -> sobrecarga
-#   1.0 x B -> verificación de recuperación completa
-# PENDIENTE: los valores de abajo son de B = 160 req/s (corrida del 25/09),
-# que quedó invalidado. Reemplazarlos antes de correr (ver GUIA_stress-recuperacion.md).
-#
-# Guía paso a paso: perf/GUIA_stress-recuperacion.md
-# Dashboard: variable $server = prefijo del entorno usado (ver abajo)
-# ============================================================================
+# Corrida 2: stress + recuperacion con B = 320 (B del breakpoint en Windows). Ver README.md.
 config:
   environments:
-    # Artillery en el host (Linux nativo).
     api:
       target: 'http://localhost:5555'
       plugins:
@@ -23,7 +8,6 @@ config:
           host: localhost
           port: 8125
           prefix: "artillery-exchange-stress"
-    # Artillery en un container dentro de la red de compose (Windows).
     docker:
       target: 'http://nginx'
       plugins:
@@ -36,22 +20,15 @@ config:
     timeout: 10
 
   phases:
-    # 1. Línea base: P95 y % de éxito "sanos", para comparar al final.
     - name: "Linea base 0.5B"
       duration: 60
       arrivalRate: 160
-    # 2. Sobrecarga: ¿el sistema degrada o colapsa? ¿qué tipo de falla aparece?
     - name: "Sobrecarga 1.5B"
       duration: 60
       arrivalRate: 480
-    # 3. Recuperación: se retira el estrés pero se sigue midiendo con carga sana.
-    #    Tiempo de recuperación = desde el inicio de esta fase hasta 3 ventanas
-    #    seguidas con % de éxito >= umbral. Tope (RTO) = 180 s; si no vuelve,
-    #    el resultado es "no se recuperó".
     - name: "Recuperacion 0.5B (tope RTO 180 s)"
       duration: 180
       arrivalRate: 160
-    # 4. Verificación: volver al boundary y comparar el P95 con el de la corrida 1.
     - name: "Verificacion 1.0B"
       duration: 60
       arrivalRate: 320
