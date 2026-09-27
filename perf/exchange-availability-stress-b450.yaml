@@ -35,26 +35,34 @@ config:
   http:
     timeout: 10
 
+  # B = 450 req/s: hipotesis, NO medido por breakpoint (la corrida del 26/09
+  # con estado recien reseteado aguanto 480 req/s al 100 %).
+  # La linea base queda en 320 = B del breakpoint de Windows.
   phases:
     # 1. Línea base: P95 y % de éxito "sanos", para comparar al final.
-    - name: "Linea base 0.5B"
+    - name: "Linea base 320"
       duration: 60
-      arrivalRate: 160
-    # 2. Sobrecarga: ¿el sistema degrada o colapsa? ¿qué tipo de falla aparece?
-    - name: "Sobrecarga 1.5B"
+      arrivalRate: 320
+    # 2. Rampa hasta la sobrecarga (320 -> 1.5B = 675).
+    - name: "Rampa 320 -> 1.5B"
+      duration: 30
+      arrivalRate: 320
+      rampTo: 675
+    # 3. Sobrecarga: ¿el sistema degrada o colapsa? ¿qué tipo de falla aparece?
+    - name: "Sobrecarga 1.5B (675)"
       duration: 60
-      arrivalRate: 480
-    # 3. Recuperación: se retira el estrés pero se sigue midiendo con carga sana.
+      arrivalRate: 675
+    # 4. Recuperación: se retira el estrés pero se sigue midiendo con carga sana.
     #    Tiempo de recuperación = desde el inicio de esta fase hasta 3 ventanas
     #    seguidas con % de éxito >= umbral. Tope (RTO) = 180 s; si no vuelve,
     #    el resultado es "no se recuperó".
-    - name: "Recuperacion 0.5B (tope RTO 180 s)"
+    - name: "Recuperacion 0.5B (225, tope RTO 180 s)"
       duration: 180
-      arrivalRate: 160
-    # 4. Verificación: volver al boundary y comparar el P95 con el de la corrida 1.
-    - name: "Verificacion 1.0B"
+      arrivalRate: 225
+    # 5. Verificación: volver a B y comparar el P95 con la línea base.
+    - name: "Verificacion 1.0B (450)"
       duration: 60
-      arrivalRate: 320
+      arrivalRate: 450
 
 scenarios:
   - name: "Exchange ARS -> USD"
