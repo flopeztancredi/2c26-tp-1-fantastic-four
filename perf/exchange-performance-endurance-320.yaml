@@ -1,0 +1,50 @@
+# Performance: corrida corta de contraste (320 req/s, 3 min). Ver GUIA_endurance-performance.md.
+# Sirve para comparar la curva P95 vs N contra la de 160 req/s. Dura menos que el OOM esperado (~3,7 min).
+config:
+  environments:
+    api:
+      target: 'http://localhost:5555'
+      plugins:
+        statsd:
+          host: localhost
+          port: 8125
+          prefix: "artillery-exchange-endurance-320"
+    docker:
+      target: 'http://nginx'
+      plugins:
+        statsd:
+          host: graphite
+          port: 8125
+          prefix: "artillery-exchange-endurance-320-docker"
+
+  http:
+    timeout: 10
+
+  phases:
+    - name: "Carga constante 320 req/s"
+      duration: 180
+      arrivalRate: 320
+
+scenarios:
+  - name: "Exchange ARS -> USD"
+    weight: 1
+    flow:
+      - post:
+          url: '/exchange'
+          json:
+            baseCurrency: "ARS"
+            counterCurrency: "USD"
+            baseAmount: 1000
+            baseAccountId: 101
+            counterAccountId: 102
+  - name: "Exchange USD -> ARS"
+    weight: 1
+    flow:
+      - post:
+          url: '/exchange'
+          json:
+            baseCurrency: "USD"
+            counterCurrency: "ARS"
+            baseAmount: 1
+            baseAccountId: 102
+            counterAccountId: 101
