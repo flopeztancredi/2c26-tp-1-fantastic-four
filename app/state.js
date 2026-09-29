@@ -11,16 +11,15 @@ const __dirname = path.dirname(__filename);
 
 const ACCOUNTS = "./state/accounts.json";
 const RATES = "./state/rates.json";
-const LOG = "./state/log.json";
+const LOG = "./state/log.jsonl";
 
 export async function init() {
   accounts = await load(ACCOUNTS);
   rates = await load(RATES);
-  log = await load(LOG);
+  log = await loadLog();
 
   scheduleSave(accounts, ACCOUNTS, 1000);
   scheduleSave(rates, RATES, 5000);
-  scheduleSave(log, LOG, 1000);
 }
 
 export function getAccounts() {
@@ -49,6 +48,35 @@ async function load(fileName) {
     } else {
       console.error(`Error loading ${filePath}:`, err);
     }
+  }
+}
+
+async function loadLog() {
+  const filePath = path.join(__dirname, LOG);
+
+  try {
+    const raw = await fs.promises.readFile(filePath, "utf8");
+
+    return raw
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+  } catch (err) {
+    if (err.code != "ENOENT") {
+      console.error(`Error loading ${filePath}:`, err);
+    }
+
+    return [];
+  }
+}
+
+export async function appendLog(entry) {
+  const filePath = path.join(__dirname, LOG);
+
+  try {
+    await fs.promises.appendFile(filePath, JSON.stringify(entry) + "\n");
+  } catch (err) {
+    console.error(`Error appending to ${filePath}:`, err);
   }
 }
 
