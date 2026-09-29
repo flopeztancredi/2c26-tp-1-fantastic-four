@@ -10,7 +10,7 @@ $ErrorActionPreference = "Continue"
 Set-Location $PSScriptRoot
 
 $Compose  = Join-Path $PSScriptRoot "..\docker-compose.yml"
-$Corto    = $Escenario -replace '^exchange-availability-', ''
+$Corto    = $Escenario -replace '^exchange-(availability|performance)-', ''
 $Prefijo  = "artillery-exchange-$Corto-docker"
 if (-not $Nombre) { $Nombre = "$($Corto)_docker" }
 $Red      = "exchange_default"
