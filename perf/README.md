@@ -7,13 +7,19 @@
 | `exchange-availability-breakpoint.yaml` | Corrida 1, breakpoint: escalones de 160 a 640 req/s para encontrar el boundary B |
 | `exchange-availability-stress.yaml` | Corrida 2, stress + recuperación con B = 320 |
 | `exchange-availability-stress-b450.yaml` | Corrida 2, variante con B = 450 como hipótesis |
+| `exchange-availability-spike.yaml` | Corrida cambiaria: pico corto a 2B, todos comprando dólares |
+| `exchange-availability-calentamiento.yaml` | Calentamiento común de la suite (no se analiza) |
+| `exchange-performance-representativa.yaml` | Cliente representativo, llegada constante, mezcla de pares y montos |
 | `correr-breakpoint-docker.ps1` | Corre cualquiera de los YAML en **Windows** |
 | `correr-breakpoint-linux.sh` | Corre cualquiera de los YAML en **Linux** |
+| `correr-suite-linux.sh` | Corre una lista de escenarios, cada uno varias veces, y llama a la captura al final |
+| `capturar-grafana.mjs` | Guarda un PNG por panel del dashboard para una corrida ya hecha |
 | `analizar-availability.py` | Tablas por ventana y por fase, B, t_rec y OOM de una corrida |
 | `dashboard.json` | Dashboard de Grafana para mirar la corrida en vivo |
 | `DISENO_availability.md` | Qué se quiere probar y por qué las pruebas están armadas así: métricas, umbrales, P95 y fases |
 | `GUIA_breakpoint.md`, `GUIA_stress-recuperacion.md` | Cómo correr cada corrida, qué mirar y qué informar |
-| `package.json`, `package-lock.json` | artillery 2.0.22 y el plugin de statsd, con versiones fijas |
+| `GUIA_suite.md` | Procedimiento completo para correr la suite en una rama y comparar contra otras |
+| `package.json`, `package-lock.json` | artillery 2.0.22, el plugin de statsd y puppeteer-core, con versiones fijas |
 | `rates.yaml`, `run-scenario.sh` | Ejemplo original del enunciado |
 
 ## Requisitos
@@ -70,6 +76,36 @@ Desde `perf/`, con el host enchufado, sin aplicaciones pesadas y con Grafana con
 
 - **B depende del entorno.** Antes de correr el stress en otra máquina, correr el breakpoint en esa misma máquina y ajustar los `arrivalRate` del YAML de stress (ver `GUIA_stress-recuperacion.md`).
 - **Duración:** unos 8 min el breakpoint y unos 6 a 7 min cada stress. En Windows se suman 1 o 2 min de `npm ci`.
+
+## Correr la suite completa (Linux)
+
+Para comparar ramas hay que correr los mismos escenarios, la misma cantidad de veces, en cada
+una. Eso lo automatiza `correr-suite-linux.sh`: por cada escenario y cada corrida, recrea la api
+con el estado inicial, calienta (`exchange-availability-calentamiento.yaml`, no se analiza),
+espera una quietud para que los paneles bajen a la línea de base, corre
+`correr-breakpoint-linux.sh` y al final captura el dashboard con `capturar-grafana.mjs`.
+Procedimiento completo, con qué revisar antes de medir y cómo comparar ramas:
+**`GUIA_suite.md`**.
+
+```sh
+bash correr-suite-linux.sh exchange-availability-breakpoint exchange-availability-spike
+```
+
+Antes de una corrida real, conviene revisar la secuencia sin tocar Docker:
+
+```sh
+SECO=1 bash correr-suite-linux.sh exchange-availability-breakpoint
+```
+
+## Capturar el dashboard
+
+`capturar-grafana.mjs` guarda un PNG por panel del dashboard (rango: `inicio.txt`/`fin.txt` de la
+corrida, con 30 s de margen) en `<carpeta>/capturas/`. La suite ya la llama al final de cada
+corrida; para una carpeta vieja o para probarla contra Grafana:
+
+```sh
+node capturar-grafana.mjs resultados/<carpeta>
+```
 
 ## Analizar
 
