@@ -1,10 +1,11 @@
 # corrida cambiaria: pico corto de demanda de dolares (todos compran, nadie vende), para ver si
 # el sistema degrada o colapsa ante un salto abrupto y si se recupera solo. usa GUIA_suite.md.
-# B de referencia (breakpoint en esta maquina) = 320 req/s, asi que el pico es a 2B = 640 req/s.
-# la tasa del pico sale de la variable de entorno EXCHANGE_SPIKE_RATE (Artillery 2.0.22 soporta
-# "{{ $processEnvironment.VAR }}" en arrivalRate: probado contra un puerto cerrado, sin pegarle a
-# arVault). el default de 640 lo pone correr-breakpoint-linux.sh antes de invocar artillery, asi
-# que si se corre este yaml directo con npx sin esa variable seteada, hay que exportarla a mano.
+# la tasa del pico tiene que ser 2B req/s, con B = breakpoint medido en ESTA maquina (320 req/s
+# fue el numero que dio en otra maquina, no sirve como referencia general). la tasa sale de la
+# variable de entorno EXCHANGE_SPIKE_RATE (Artillery 2.0.22 soporta "{{ $processEnvironment.VAR }}"
+# en arrivalRate: probado contra un puerto cerrado, sin pegarle a arVault), sin ningun default:
+# correr-breakpoint-linux.sh FALLA si se corre este escenario sin esa variable seteada a mano,
+# en vez de asumir un numero generico.
 config:
   environments:
     api:
