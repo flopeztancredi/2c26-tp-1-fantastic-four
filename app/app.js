@@ -57,8 +57,8 @@ app.put("/rates", (req, res) => {
 
 // LOG endpoint
 
-app.get("/log", (req, res) => {
-  res.json(getLog());
+app.get("/log", async (req, res) => {
+  res.json(await getLog());
 });
 
 // EXCHANGE endpoint

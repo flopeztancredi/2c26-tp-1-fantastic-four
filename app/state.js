@@ -4,7 +4,6 @@ import fs from "fs";
 
 let accounts = null;
 let rates = null;
-let log = null;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -12,11 +11,12 @@ const __dirname = path.dirname(__filename);
 const ACCOUNTS = "./state/accounts.json";
 const RATES = "./state/rates.json";
 const LOG = "./state/log.jsonl";
+const LEGACY_LOG = "./state/log.json";
 
 export async function init() {
   accounts = await load(ACCOUNTS);
   rates = await load(RATES);
-  log = await loadLog();
+  await migrateLegacyLog();
 
   scheduleSave(accounts, ACCOUNTS, 1000);
   scheduleSave(rates, RATES, 5000);
@@ -30,8 +30,8 @@ export function getRates() {
   return rates;
 }
 
-export function getLog() {
-  return log;
+export async function getLog() {
+  return loadLog();
 }
 
 async function load(fileName) {
@@ -67,6 +67,40 @@ async function loadLog() {
     }
 
     return [];
+  }
+}
+
+async function migrateLegacyLog() {
+  const logPath = path.join(__dirname, LOG);
+  const legacyPath = path.join(__dirname, LEGACY_LOG);
+
+  try {
+    await fs.promises.access(logPath);
+    return;
+  } catch (err) {
+    if (err.code != "ENOENT") {
+      console.error(`Error checking ${logPath}:`, err);
+      return;
+    }
+  }
+
+  try {
+    const raw = await fs.promises.readFile(legacyPath, "utf8");
+    const entries = JSON.parse(raw);
+
+    if (!Array.isArray(entries)) {
+      console.error(`Error migrating ${legacyPath}: expected an array`);
+      return;
+    }
+
+    await fs.promises.writeFile(
+      logPath,
+      entries.map((entry) => JSON.stringify(entry)).join("\n") + (entries.length ? "\n" : "")
+    );
+  } catch (err) {
+    if (err.code != "ENOENT") {
+      console.error(`Error migrating ${legacyPath}:`, err);
+    }
   }
 }
 
