@@ -76,22 +76,31 @@ for p in periodos:
     c = ventanas[p]["c"]
     codigos = {k.split(".")[-1]: v for k, v in c.items() if k.startswith("http.codes.")}
     errores = {k[len("errors."):]: v for k, v in c.items() if k.startswith("errors.")}
+    # atendido = 2xx + 4xx: un 4xx es una respuesta correcta del servicio, no una falla de
+    # availability (decisión del grupo, ver DISENO_availability.md secc. 2). "ok" se mantiene
+    # como el conteo de 2xx solo, porque alimenta el acumulado de exchanges (N) que usa tambien
+    # el analisis de endurance/performance. el 429 cuenta como atendido pero se separa aparte:
+    # es carga descartada por rate limiting, no un exito del negocio. falla = 5xx, timeout o
+    # error de red.
     ok = sum(v for k, v in codigos.items() if k.startswith("2"))
+    atendido = sum(v for k, v in codigos.items() if k.startswith(("2", "4")))
+    descartes_429 = codigos.get("429", 0)
     total = sum(codigos.values()) + sum(errores.values())
     ss = ventanas[p]["s"]
-    filas.append(dict(p=p, fase=fase_de(p), ok=ok, total=total, vu=c.get("vusers.created", 0),
-                      pct=100.0 * ok / total if total else None,
+    filas.append(dict(p=p, fase=fase_de(p), ok=ok, atendido=atendido, descartes_429=descartes_429,
+                      total=total, vu=c.get("vusers.created", 0),
+                      pct=100.0 * atendido / total if total else None,
                       p95=max((s["p95"] for s in ss), default=None),
                       med=max((s["median"] for s in ss), default=None),
                       cpu=maximo(cpu, p), mem=maximo(mem, p),
-                      fallas={k: v for k, v in codigos.items() if not k.startswith("2")} | errores,
+                      fallas={k: v for k, v in codigos.items() if k.startswith("5")} | errores,
                       acum_antes=acum, acum=acum + ok))
     acum += ok
 
-print("| Hora | Fase | t-t0 (s) | vusers | 2xx | % éxito | P95 2xx (ms) | Mediana (ms) | CPU api % | Mem api MiB | Fallas | 2xx acum. |")
-print("|---|---|---|---|---|---|---|---|---|---|---|---|")
+print("| Hora | Fase | t-t0 (s) | vusers | 2xx | 429 | % éxito | P95 2xx (ms) | Mediana (ms) | CPU api % | Mem api MiB | Fallas | 2xx acum. |")
+print("|---|---|---|---|---|---|---|---|---|---|---|---|---|")
 for f in filas:
-    print(f"| {hora(f['p'])} | {f['fase']} | {f['p'] - t0 if t0 else '-'} | {f['vu']} | {f['ok']} | "
+    print(f"| {hora(f['p'])} | {f['fase']} | {f['p'] - t0 if t0 else '-'} | {f['vu']} | {f['ok']} | {f['descartes_429']} | "
           f"{'-' if f['pct'] is None else f'{f['pct']:.2f}'} | {f['p95'] or '-'} | {f['med'] or '-'} | "
           f"{'-' if f['cpu'] is None else f'{f['cpu']:.0f}'} | {'-' if f['mem'] is None else f'{f['mem'] / 2**20:.0f}'} | "
           f"{', '.join(f'{k}: {v}' for k, v in f['fallas'].items())} | {f['acum']} |")
@@ -102,21 +111,24 @@ for f in filas:
     por_fase[f["fase"]].append(f)
 pct_fase = {}
 for nombre, dur, inicio in fases:
-    print(f"  {nombre} — inicio {hora(inicio)}, {dur} s")
+    print(f"  {nombre} (inicio {hora(inicio)}, {dur} s)")
     for etiqueta, xs in (("todas", por_fase[nombre]), ("sin 1a", por_fase[nombre][1:])):
         xs = [x for x in xs if x["total"]]
         if not xs:
             continue
-        ok, total = sum(x["ok"] for x in xs), sum(x["total"] for x in xs)
-        pct_fase[nombre] = 100 * ok / total
+        ok = sum(x["ok"] for x in xs)
+        atendido = sum(x["atendido"] for x in xs)
+        total = sum(x["total"] for x in xs)
+        descartes_429 = sum(x["descartes_429"] for x in xs)
+        pct_fase[nombre] = 100 * atendido / total
         p95s = [x["p95"] for x in xs if x["p95"]]
         mems = [x["mem"] for x in xs if x["mem"]]
         cpus = [x["cpu"] for x in xs if x["cpu"] is not None]
         fallas = Counter()
         for x in xs:
             fallas.update(x["fallas"])
-        print(f"    [{etiqueta}] % éxito {pct_fase[nombre]:.2f} | 2xx/s {ok / (10 * len(xs)):.0f} | "
-              f"P95 {min(p95s, default='-')}–{max(p95s, default='-')} ms | "
+        print(f"    [{etiqueta}] % éxito {pct_fase[nombre]:.2f} | 2xx/s {ok / (10 * len(xs)):.0f} | 429: {descartes_429} | "
+              f"P95 {min(p95s, default='-')} a {max(p95s, default='-')} ms | "
               f"CPU máx {max(cpus, default=0):.0f} % | Mem máx {max(mems, default=0) / 2**20:.0f} MiB | fallas {dict(fallas)}")
 
 if t0:
