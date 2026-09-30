@@ -943,6 +943,397 @@
         "align": false,
         "alignLevel": null
       }
+    },
+    {
+      "id": 20,
+      "type": "row",
+      "title": "Performance vs N: endurance a carga constante (adicional)",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 46
+      },
+      "panels": []
+    },
+    {
+      "id": 21,
+      "type": "xychart",
+      "pluginVersion": "11.5.10",
+      "title": "Tiempo de respuesta vs N (mediana, P95, P99, máx) y % de éxito",
+      "description": "Cada punto es una ventana de 10 s de artillery. Eje izquierdo: latencia en ms. Eje derecho: % de éxito de la misma ventana (regla del equipo: todo percentil se informa junto con la tasa de éxito). Hipótesis H1: con carga constante, la cola (P99, máx, P95) sube con N antes que la mediana. N = exchanges acumulados, calculado como la suma de las respuestas 2xx de artillery desde el inicio del rango de tiempo (integral en Graphite). Poner el rango de Grafana justo sobre la corrida: si empieza antes, N suma corridas anteriores. Vale mientras el % de éxito esté cerca del 100 %; con timeouts, la N real es mayor. Los números para el informe salen de la columna '2xx acum.' de analizar-availability.py.",
+      "datasource": "Graphite",
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 47
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "target": "alias(integral(sumSeries(stats.gauges.$server.codes.2*)), 'N')",
+          "textEditor": true
+        },
+        {
+          "refId": "B",
+          "target": "alias(stats.gauges.$server.latency.median, 'Mediana')",
+          "textEditor": true
+        },
+        {
+          "refId": "C",
+          "target": "alias(stats.gauges.$server.latency.p95, 'P95')",
+          "textEditor": true
+        },
+        {
+          "refId": "D",
+          "target": "alias(stats.gauges.$server.latency.p99, 'P99')",
+          "textEditor": true
+        },
+        {
+          "refId": "E",
+          "target": "alias(stats.gauges.$server.latency.max, 'Máx')",
+          "textEditor": true
+        },
+        {
+          "refId": "F",
+          "target": "alias(asPercent(sumSeries(stats.gauges.$server.codes.2*, scale(stats.gauges.$server.scenariosCreated, 0)), sumSeries(stats.gauges.$server.codes.*, stats.gauges.$server.errors.*)), '% éxito')",
+          "textEditor": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "Time",
+            "mode": "outer"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "min": 0,
+          "custom": {
+            "show": "points",
+            "pointSize": {
+              "fixed": 5
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "N"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.axisLabel",
+                "value": "N (exchanges acumulados)"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "% éxito"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "max",
+                "value": 100
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "custom.axisLabel",
+                "value": "% éxito"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "mapping": "auto",
+        "series": [
+          {
+            "frame": {
+              "matcher": {
+                "id": "byIndex",
+                "options": 0
+              }
+            }
+          }
+        ],
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 22,
+      "type": "xychart",
+      "pluginVersion": "11.5.10",
+      "title": "Efficiency: CPU de la api vs N (carga constante)",
+      "description": "Con la tasa fija, si la CPU sube es porque cada request cuesta más: la eficiencia (performance por recurso consumido) baja a medida que crece N. 100 % = el límite de 1 CPU del compose. N = exchanges acumulados, calculado como la suma de las respuestas 2xx de artillery desde el inicio del rango de tiempo (integral en Graphite). Poner el rango de Grafana justo sobre la corrida: si empieza antes, N suma corridas anteriores. Vale mientras el % de éxito esté cerca del 100 %; con timeouts, la N real es mayor. Los números para el informe salen de la columna '2xx acum.' de analizar-availability.py.",
+      "datasource": "Graphite",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 57
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "target": "alias(integral(sumSeries(stats.gauges.$server.codes.2*)), 'N')",
+          "textEditor": true
+        },
+        {
+          "refId": "B",
+          "target": "alias(asPercent(derivative(keepLastValue(stats.gauges.cadvisor.exchange-api-1.cpu_cumulative_usage, 100)), 10000000000), 'CPU api (% de 1 core)')",
+          "textEditor": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "Time",
+            "mode": "outer"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "custom": {
+            "show": "points",
+            "pointSize": {
+              "fixed": 5
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "N"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.axisLabel",
+                "value": "N (exchanges acumulados)"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "CPU api (% de 1 core)"
+            },
+            "properties": [
+              {
+                "id": "max",
+                "value": 100
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "mapping": "auto",
+        "series": [
+          {
+            "frame": {
+              "matcher": {
+                "id": "byIndex",
+                "options": 0
+              }
+            }
+          }
+        ],
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 23,
+      "type": "xychart",
+      "pluginVersion": "11.5.10",
+      "title": "Efficiency: memoria de la api vs N (carga constante)",
+      "description": "Working set de exchange-api-1 (cadvisor, sin swap). El límite del compose es 512 MiB; con la swap del container, el OOM llega un poco después. La pendiente (MiB cada 1000 exchanges) permite estimar cuánto aguanta el sistema a una tasa dada. N = exchanges acumulados, calculado como la suma de las respuestas 2xx de artillery desde el inicio del rango de tiempo (integral en Graphite). Poner el rango de Grafana justo sobre la corrida: si empieza antes, N suma corridas anteriores. Vale mientras el % de éxito esté cerca del 100 %; con timeouts, la N real es mayor. Los números para el informe salen de la columna '2xx acum.' de analizar-availability.py.",
+      "datasource": "Graphite",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 57
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "target": "alias(integral(sumSeries(stats.gauges.$server.codes.2*)), 'N')",
+          "textEditor": true
+        },
+        {
+          "refId": "B",
+          "target": "alias(scale(stats.gauges.cadvisor.exchange-api-1.memory_working_set, 0.00000095367431640625), 'Memoria api (MiB)')",
+          "textEditor": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "Time",
+            "mode": "outer"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "mbytes",
+          "min": 0,
+          "custom": {
+            "show": "points",
+            "pointSize": {
+              "fixed": 5
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "N"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.axisLabel",
+                "value": "N (exchanges acumulados)"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Memoria api (MiB)"
+            },
+            "properties": [
+              {
+                "id": "max",
+                "value": 512
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "mapping": "auto",
+        "series": [
+          {
+            "frame": {
+              "matcher": {
+                "id": "byIndex",
+                "options": 0
+              }
+            }
+          }
+        ],
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 24,
+      "type": "timeseries",
+      "title": "N acumulado vs tiempo",
+      "description": "Con carga constante y 100 % de éxito, N crece en línea recta (160 req/s = 9600 por minuto). Si la pendiente baja, el sistema ya no atiende todo lo que le llega. N = exchanges acumulados, calculado como la suma de las respuestas 2xx de artillery desde el inicio del rango de tiempo (integral en Graphite). Poner el rango de Grafana justo sobre la corrida: si empieza antes, N suma corridas anteriores. Vale mientras el % de éxito esté cerca del 100 %; con timeouts, la N real es mayor. Los números para el informe salen de la columna '2xx acum.' de analizar-availability.py.",
+      "datasource": "Graphite",
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 66
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "target": "alias(integral(sumSeries(stats.gauges.$server.codes.2*)), 'N')",
+          "textEditor": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "showPoints": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      }
     }
   ],
   "refresh": "10s",
@@ -1005,9 +1396,19 @@
             "selected": false,
             "text": "artillery-exchange-stress-b450-docker",
             "value": "artillery-exchange-stress-b450-docker"
+          },
+          {
+            "selected": false,
+            "text": "artillery-exchange-endurance-docker",
+            "value": "artillery-exchange-endurance-docker"
+          },
+          {
+            "selected": false,
+            "text": "artillery-exchange-endurance-320-docker",
+            "value": "artillery-exchange-endurance-320-docker"
           }
         ],
-        "query": "artillery-exchange-breakpoint,artillery-exchange-stress,artillery-api,artillery-exchange-race,artillery-exchange-breakpoint-docker,artillery-exchange-stress-docker,artillery-exchange-stress-b450,artillery-exchange-stress-b450-docker",
+        "query": "artillery-exchange-breakpoint,artillery-exchange-stress,artillery-api,artillery-exchange-race,artillery-exchange-breakpoint-docker,artillery-exchange-stress-docker,artillery-exchange-stress-b450,artillery-exchange-stress-b450-docker,artillery-exchange-endurance-docker,artillery-exchange-endurance-320-docker",
         "skipUrlSync": false,
         "type": "custom"
       },
