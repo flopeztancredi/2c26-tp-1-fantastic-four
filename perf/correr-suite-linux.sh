@@ -5,15 +5,21 @@
 #   (cada <escenario> es un yaml de perf/ sin la extension, por ejemplo exchange-availability-breakpoint)
 #
 # Opciones por variable de entorno:
-#   REPETICIONES=N   corridas por escenario (default 3)
-#   QUIETUD=S        segundos de descanso entre el calentamiento y la corrida medida (default 60)
-#   API_REPLICAS=N   replicas de la api (pasa --scale api=N). ver aviso al final del script:
-#                    hoy correr-breakpoint-linux.sh no soporta mas de 1
-#   FALLA=kill|stop  induce una falla de la api durante la corrida medida (docker kill / stop)
-#   FALLA_A=S        segundos desde el inicio de la corrida medida para la falla (obligatorio con FALLA)
-#   FORZAR=1         corre igual si la maquina esta a bateria
+#   REPETICIONES=N        corridas por escenario (default 3)
+#   QUIETUD=S              segundos de enfriamiento antes de resetear la api, para que los
+#                          paneles bajen a la linea de base de la corrida anterior (default 60)
+#   API_REPLICAS=N         replicas de la api (correr-breakpoint-linux.sh hace el --scale y
+#                          verifica que arrancaron las N)
+#   FALLA=kill|stop|crash   induce una falla de exchange-api-1 durante la corrida medida:
+#                          kill = docker kill (SIGKILL, Docker lo trata como parada manual,
+#                          no dispara restart policy); stop = docker stop (SIGTERM + 10s de
+#                          gracia, tampoco dispara restart policy); crash = mata el proceso
+#                          real con kill -9 desde afuera de Docker, que si dispara "restart:
+#                          unless-stopped"
+#   FALLA_A=S              segundos desde el inicio de la corrida medida para la falla (obligatorio con FALLA)
+#   FORZAR=1               corre igual si la maquina esta a bateria
 #   POWER_SUPPLY_DIR=ruta  de donde leer el estado de alimentacion (default /sys/class/power_supply)
-#   SECO=1           imprime los comandos en vez de ejecutarlos (para revisar la suite sin medir)
+#   SECO=1                 imprime los comandos en vez de ejecutarlos (para revisar la suite sin medir)
 set -u
 cd "$(dirname "$0")"
 
@@ -26,7 +32,6 @@ FORZAR=${FORZAR:-0}
 POWER_SUPPLY_DIR=${POWER_SUPPLY_DIR:-/sys/class/power_supply}
 SECO=${SECO:-0}
 COMPOSE=../docker-compose.yml
-API=http://localhost:5555
 LOCK=/tmp/arvault-midiendo.lock
 
 paso() { printf '\n### %s\n' "$1"; }
@@ -47,11 +52,12 @@ for esc in "$@"; do
 done
 case "$REPETICIONES" in ''|*[!0-9]*) falla_uso "REPETICIONES debe ser un numero" ;; esac
 case "$QUIETUD" in ''|*[!0-9]*) falla_uso "QUIETUD debe ser un numero" ;; esac
-case "$API_REPLICAS" in ''|*[!0-9]*) falla_uso "API_REPLICAS debe ser un numero" ;; esac
+case "$API_REPLICAS" in ''|*[!0-9]*|0) falla_uso "API_REPLICAS debe ser un numero mayor a 0" ;; esac
 if [ -n "$FALLA" ]; then
-  case "$FALLA" in kill|stop) ;; *) falla_uso "FALLA debe ser 'kill' o 'stop'" ;; esac
+  case "$FALLA" in kill|stop|crash) ;; *) falla_uso "FALLA debe ser 'kill', 'stop' o 'crash'" ;; esac
   case "$FALLA_A" in ''|*[!0-9]*) falla_uso "FALLA necesita FALLA_A=<segundos>" ;; esac
 fi
+export API_REPLICAS COMPOSE
 
 # rama, commit y working tree, para entorno.txt de cada corrida (ver "Runner de la suite")
 RAMA=$(git rev-parse --abbrev-ref HEAD 2> /dev/null | tr '/' '-')
@@ -63,8 +69,8 @@ CAMBIOS_SIN_COMMITEAR=$(git status --porcelain 2> /dev/null | wc -l | tr -d ' ')
 # arrancar) para no dejar mediciones a mitad de camino si alguien desenchufa la notebook.
 # ojo con esta funcion llamada como ENCHUFADO=$(chequear_alimentacion): el exit adentro de
 # falla_uso corta el SUBSHELL de la sustitucion de comandos, no el script. bash si propaga ese
-# codigo de salida como el $? de la linea de asignacion (probado), asi que el punto de llamada
-# tiene que chequearlo con "|| exit 1": sin eso el script seguia de largo con bateria
+# codigo de salida como el $? de la linea de asignacion (probado mas abajo), asi que el punto de
+# llamada tiene que chequearlo con "|| exit 1": sin eso el script seguia de largo con bateria
 chequear_alimentacion() {
   local enchufado=0 f
   for f in "$POWER_SUPPLY_DIR"/*/online; do
@@ -108,54 +114,68 @@ for ESCENARIO in "$@"; do
     paso "$ESCENARIO, corrida $i/$REPETICIONES"
     ENCHUFADO=$(chequear_alimentacion) || exit 1
 
-    paso "Recreando la api con el estado inicial de la imagen"
-    ejecutar docker compose -f "$COMPOSE" up -d
-    ejecutar docker compose -f "$COMPOSE" up -d --build --force-recreate --scale "api=$API_REPLICAS" api
-
-    paso "Esperando a que la api responda por nginx"
-    if [ "$SECO" = 1 ]; then
-      echo "+ (poll a $API/rates hasta 200 o timeout de 30 s)"
-    else
-      LISTA=0
-      for _ in $(seq 30); do
-        curl -sf -m 2 "$API/rates" > /dev/null && { LISTA=1; break; }
-        sleep 1
-      done
-      [ "$LISTA" = 1 ] || falla_uso "la api no responde en $API/rates"
-    fi
-
-    paso "Calentamiento (no se analiza)"
-    ejecutar npx artillery run exchange-availability-calentamiento.yaml -e api
-
-    paso "Quietud de ${QUIETUD}s antes de medir, para que los paneles bajen a la linea de base"
-    ejecutar sleep "$QUIETUD"
-
     NOMBRE="${RAMA}_${CORTO}_corrida${i}"
     RESULT_DIR="resultados/$(date +%F)_$NOMBRE"
+    [ -e "$RESULT_DIR" ] && falla_uso "ya existe $RESULT_DIR de una corrida anterior. Elegi otro nombre, cambia REPETICIONES o borrala a mano"
+
+    paso "Enfriamiento de ${QUIETUD}s antes de resetear, para que los paneles bajen a la linea de base"
+    ejecutar sleep "$QUIETUD"
 
     FALLA_PID=""
     if [ -n "$FALLA" ]; then
       if [ "$SECO" = 1 ]; then
-        echo "+ (a los ${FALLA_A}s de iniciada la corrida medida: docker $FALLA exchange-api-1," \
+        echo "+ (a los ${FALLA_A}s de iniciada la corrida medida: falla '$FALLA' sobre exchange-api-1," \
              "registrado con hora en $RESULT_DIR/falla-inducida.txt)"
       else
         (
-          # espera a que exista inicio.txt (lo escribe correr-breakpoint-linux.sh justo antes de
-          # arrancar artillery) y programa la falla desde ESE instante, no desde el arranque del runner
-          while [ ! -f "$RESULT_DIR/inicio.txt" ]; do sleep 0.5; done
+          # espera acotada a que exista inicio.txt (lo escribe correr-breakpoint-linux.sh justo
+          # antes de arrancar artillery). si ese script no llega a arrancar la medicion (falta
+          # espacio, la api no responde, npm ci lento, etc.) este subshell no se puede quedar
+          # esperando para siempre: corta a los 180s o antes si aparece fin.txt (corrida ya
+          # termino sin haber llegado a medir)
+          LLEGO=0
+          for _ in $(seq 360); do
+            [ -f "$RESULT_DIR/inicio.txt" ] && { LLEGO=1; break; }
+            [ -f "$RESULT_DIR/fin.txt" ] && break
+            sleep 0.5
+          done
+          [ "$LLEGO" = 1 ] || exit 0
+
           INICIO_REAL=$(cat "$RESULT_DIR/inicio.txt")
           OBJETIVO=$((INICIO_REAL + FALLA_A))
-          while [ "$(date +%s)" -lt "$OBJETIVO" ]; do sleep 1; done
-          docker "$FALLA" exchange-api-1 > /dev/null 2>&1
-          echo "$(date +%s) $(date -u +%FT%TZ) docker $FALLA exchange-api-1" >> "$RESULT_DIR/falla-inducida.txt"
+          while [ "$(date +%s)" -lt "$OBJETIVO" ]; do
+            [ -f "$RESULT_DIR/fin.txt" ] && exit 0
+            sleep 1
+          done
+          [ -f "$RESULT_DIR/fin.txt" ] && exit 0
+
+          case "$FALLA" in
+            kill) docker kill exchange-api-1 > /dev/null 2>&1 ;;
+            stop) docker stop exchange-api-1 > /dev/null 2>&1 ;;
+            crash)
+              # kill -9 desde afuera de docker: a diferencia de "docker kill"/"docker stop" (que
+              # docker registra como parada manual), esto si dispara "restart: unless-stopped"
+              PID_API=$(docker inspect -f '{{.State.Pid}}' exchange-api-1 2> /dev/null)
+              [ -n "$PID_API" ] && docker run --rm --pid=host alpine:3 kill -9 "$PID_API" > /dev/null 2>&1
+              ;;
+          esac
+          echo "$(date +%s) $(date -u +%FT%TZ) falla=$FALLA exchange-api-1" >> "$RESULT_DIR/falla-inducida.txt"
         ) &
         FALLA_PID=$!
       fi
     fi
 
     paso "Corriendo el escenario medido (correr-breakpoint-linux.sh)"
-    ejecutar bash correr-breakpoint-linux.sh -e "$ESCENARIO" -n "$NOMBRE"
+    # esta llamada NO pasa por ejecutar(): correr-breakpoint-linux.sh ya respeta su propio SECO
+    # (heredado del entorno) y con el dry run entero se ve tambien su secuencia interna
+    # (replicas, redis, EXCHANGE_SPIKE_RATE), no solo esta linea como un comando opaco
+    bash correr-breakpoint-linux.sh -e "$ESCENARIO" -n "$NOMBRE"
+    SALIDA=$?
 
+    if [ "$SALIDA" -ne 0 ]; then
+      if [ -n "$FALLA_PID" ]; then kill "$FALLA_PID" 2> /dev/null; wait "$FALLA_PID" 2> /dev/null; fi
+      falla_uso "correr-breakpoint-linux.sh termino con exit $SALIDA en $ESCENARIO corrida $i/$REPETICIONES. Aborto la suite, no toco $RESULT_DIR."
+    fi
     [ -n "$FALLA_PID" ] && wait "$FALLA_PID" 2> /dev/null
 
     if [ "$SECO" = 1 ]; then
@@ -170,9 +190,3 @@ for ESCENARIO in "$@"; do
 done
 
 paso "Suite terminada"
-if [ "$API_REPLICAS" != 1 ]; then
-  echo "Aviso: con API_REPLICAS=$API_REPLICAS, correr-breakpoint-linux.sh va a abortar (hoy" \
-       "rechaza mas de una replica de la api) y ademas su propio reset no repite --scale, asi" \
-       "que si llegara a pasar ese chequeo la volveria a bajar a 1. Hace falta extender ese" \
-       "script para soportar N replicas antes de usar esta opcion de verdad."
-fi
