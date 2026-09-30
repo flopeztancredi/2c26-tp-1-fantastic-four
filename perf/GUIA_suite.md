@@ -69,12 +69,21 @@ Opciones por variable de entorno:
     reinicio.
 - **`FALLA`/`FALLA_A` sirven para medir recuperación** sin depender de que la carga por sí sola
   alcance a tirar la api. La falla se programa desde el inicio real de la corrida medida
-  (`inicio.txt`, no desde que arranca el runner), con una espera acotada (no se cuelga para
-  siempre si la corrida no llega a arrancar), y queda registrada con hora en
-  `resultados/<carpeta>/falla-inducida.txt`.
+  (`inicio.txt`, no desde que arranca el runner) y queda registrada con hora en
+  `resultados/<carpeta>/falla-inducida.txt`. Con `FALLA=crash`, la suite hace `docker pull -q
+  alpine:3` una sola vez al arrancar, para no tener que bajar esa imagen justo en el instante de
+  inducir la falla.
+- **Si la falla no queda inducida, la suite aborta.** Si terminada la corrida no existe
+  `falla-inducida.txt` (por ejemplo, `FALLA_A` más largo que la duración del escenario, o la
+  corrida terminó antes de tiempo), la suite no sigue como si la falla se hubiera inducido: corta
+  con un error claro. El subshell que espera para inducirla no tiene tope de tiempo propio (un
+  tope competía con este chequeo: se podía "rendir" en silencio si el primer build tras cambiar
+  de rama tardaba de más), la única salida temprana válida es que la corrida ya haya terminado.
 - **Si `correr-breakpoint-linux.sh` falla, la suite aborta** en el acto: no toca la carpeta de esa
   corrida, corta cualquier `FALLA` pendiente y no sigue con las repeticiones ni escenarios que
-  quedaban.
+  quedaban. La carpeta de resultados la calcula una sola vez la suite y se la pasa al script
+  (`-d`), para que una corrida que cruce la medianoche no termine con dos nombres de carpeta
+  distintos entre la suite y el script.
 - **Revisar con `SECO=1` antes de una corrida larga:** imprime toda la secuencia (comandos de
   Docker, enfriamiento, nombre de cada carpeta) sin tocar Docker ni Artillery.
 - **El spike necesita `EXCHANGE_SPIKE_RATE` exportada a mano, sin default.** Tiene que ser 2·B

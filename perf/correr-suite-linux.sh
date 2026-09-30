@@ -16,7 +16,10 @@
 #                          gracia, tampoco dispara restart policy); crash = mata el proceso
 #                          real con kill -9 desde afuera de Docker, que si dispara "restart:
 #                          unless-stopped"
-#   FALLA_A=S              segundos desde el inicio de la corrida medida para la falla (obligatorio con FALLA)
+#   FALLA_A=S              segundos desde el inicio de la corrida medida para la falla (obligatorio
+#                          con FALLA). Si no queda falla-inducida.txt en la carpeta de resultados
+#                          (FALLA_A mas largo que el escenario, por ejemplo), la suite aborta:
+#                          nunca sigue como si la falla se hubiera inducido sin inducirla
 #   FORZAR=1               corre igual si la maquina esta a bateria
 #   POWER_SUPPLY_DIR=ruta  de donde leer el estado de alimentacion (default /sys/class/power_supply)
 #   SECO=1                 imprime los comandos en vez de ejecutarlos (para revisar la suite sin medir)
@@ -58,6 +61,13 @@ if [ -n "$FALLA" ]; then
   case "$FALLA_A" in ''|*[!0-9]*) falla_uso "FALLA necesita FALLA_A=<segundos>" ;; esac
 fi
 export API_REPLICAS COMPOSE
+
+# prefetch de la imagen que usa FALLA=crash: si se bajara recien en el instante de inducir la
+# falla, esa demora se suma al momento en que se supone que la api ya deberia estar cayendo
+if [ "$FALLA" = crash ]; then
+  paso "Prefetching alpine:3 (para FALLA=crash)"
+  ejecutar docker pull -q alpine:3
+fi
 
 # rama, commit y working tree, para entorno.txt de cada corrida (ver "Runner de la suite")
 RAMA=$(git rev-parse --abbrev-ref HEAD 2> /dev/null | tr '/' '-')
@@ -128,18 +138,17 @@ for ESCENARIO in "$@"; do
              "registrado con hora en $RESULT_DIR/falla-inducida.txt)"
       else
         (
-          # espera acotada a que exista inicio.txt (lo escribe correr-breakpoint-linux.sh justo
-          # antes de arrancar artillery). si ese script no llega a arrancar la medicion (falta
-          # espacio, la api no responde, npm ci lento, etc.) este subshell no se puede quedar
-          # esperando para siempre: corta a los 180s o antes si aparece fin.txt (corrida ya
-          # termino sin haber llegado a medir)
-          LLEGO=0
-          for _ in $(seq 360); do
-            [ -f "$RESULT_DIR/inicio.txt" ] && { LLEGO=1; break; }
-            [ -f "$RESULT_DIR/fin.txt" ] && break
+          # espera a que exista inicio.txt (lo escribe correr-breakpoint-linux.sh justo antes de
+          # arrancar artillery). SIN tope de tiempo: un tope aca competiria con el chequeo de
+          # SALIDA de mas abajo, que ya mata este subshell si correr-breakpoint-linux.sh termina
+          # mal. con un tope, este subshell se "rendia" en silencio (exit 0, sin avisar a nadie)
+          # si el script tardaba de mas en arrancar la medicion (el primer build tras cambiar de
+          # rama, por ejemplo), y la corrida seguia midiendo tranquila sin la falla. la unica
+          # salida temprana valida es que la corrida ya haya terminado sin haber llegado a medir
+          while [ ! -f "$RESULT_DIR/inicio.txt" ]; do
+            [ -f "$RESULT_DIR/fin.txt" ] && exit 0
             sleep 0.5
           done
-          [ "$LLEGO" = 1 ] || exit 0
 
           INICIO_REAL=$(cat "$RESULT_DIR/inicio.txt")
           OBJETIVO=$((INICIO_REAL + FALLA_A))
@@ -182,6 +191,13 @@ for ESCENARIO in "$@"; do
       falla_uso "correr-breakpoint-linux.sh termino con exit $SALIDA en $ESCENARIO corrida $i/$REPETICIONES. Aborto la suite, no toco $RESULT_DIR."
     fi
     [ -n "$FALLA_PID" ] && wait "$FALLA_PID" 2> /dev/null
+
+    # si se pidio FALLA y no quedo falla-inducida.txt, paso en silencio: FALLA_A mas largo que
+    # la corrida, el escenario termino antes de tiempo, etc. no seguir como si la falla se
+    # hubiera inducido: mejor un aborto ruidoso que un resultado de recuperacion que no mide nada
+    if [ -n "$FALLA" ] && [ "$SECO" != 1 ] && [ ! -f "$RESULT_DIR/falla-inducida.txt" ]; then
+      falla_uso "la falla no se indujo en $RESULT_DIR (revisar FALLA_A=$FALLA_A contra la duracion de $ESCENARIO). Aborto la suite."
+    fi
 
     if [ "$SECO" = 1 ]; then
       echo "+ (agregar rama/commit/cambios sin commitear y enchufado/perfil/governor a $RESULT_DIR/entorno.txt)"
