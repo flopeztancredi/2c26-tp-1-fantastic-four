@@ -13,5 +13,8 @@
   "dependencies": {
     "artillery": "2.0.22",
     "artillery-plugin-statsd": "^2.2.1"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^25.12.0"
   }
 }
