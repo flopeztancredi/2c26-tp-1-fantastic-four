@@ -67,6 +67,10 @@ VMSTAT=$!
 trap 'kill $EVENTOS $SOCKSTAT $VMSTAT 2> /dev/null' EXIT
 
 paso "5/7 Corriendo artillery"
+# default del pico de exchange-availability-spike.yaml (2B = 640 req/s de referencia). no afecta
+# a otros escenarios: solo lo lee ese yaml. sin export, "{{ $processEnvironment.X }}" con la
+# variable sin definir renderiza vacio y Artillery revienta con un assert de NaN al armar las fases
+export EXCHANGE_SPIKE_RATE="${EXCHANGE_SPIKE_RATE:-640}"
 INICIO=$(date +%s)
 echo "$INICIO" > "$DIR/inicio.txt"
 # artillery en cores lentos (E), lejos de la api y de nginx (ver cpuset en docker-compose.yml)
