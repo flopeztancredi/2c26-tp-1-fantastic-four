@@ -13,7 +13,7 @@ while getopts "e:n:" opt; do
   esac
 done
 
-CORTO=${ESCENARIO#exchange-availability-}
+CORTO=$(echo "$ESCENARIO" | sed -E 's/^exchange-(availability|performance|metricas)-//')
 PREFIJO=artillery-exchange-$CORTO
 NOMBRE=${NOMBRE:-${CORTO}_linux}
 COMPOSE=../docker-compose.yml
@@ -26,7 +26,7 @@ falla() { echo "ERROR: $1" >&2; exit 1; }
 
 [ -f "$ESCENARIO.yaml" ] || falla "no existe $ESCENARIO.yaml"
 [ -e "$DIR" ] && falla "ya existe $DIR. Usar -n para elegir otra carpeta."
-for cmd in docker node npm curl vmstat; do command -v $cmd > /dev/null || falla "falta $cmd"; done
+for cmd in docker node npm curl vmstat taskset; do command -v $cmd > /dev/null || falla "falta $cmd"; done
 mkdir -p "$DIR"
 
 paso "1/7 Instalando artillery (npm ci)"
@@ -47,7 +47,8 @@ cp "$ESCENARIO.yaml" "$DIR/"
 paso "3/7 Registrando el entorno"
 { uname -a; lscpu | grep -E 'Model name|^CPU\(s\)|Thread'; free -h; swapon --show
   docker version --format 'Engine {{.Server.Version}}'; docker compose version; node -v
-  docker inspect -f 'Memory={{.HostConfig.Memory}} MemorySwap={{.HostConfig.MemorySwap}}' exchange-api-1
+  docker inspect -f 'Memory={{.HostConfig.Memory}} MemorySwap={{.HostConfig.MemorySwap}} CpusetCpus={{.HostConfig.CpusetCpus}}' exchange-api-1 exchange-nginx-1
+  echo "ARTILLERY_CPUSET=${ARTILLERY_CPUSET:-12-15}"
 } > "$DIR/entorno.txt" 2>&1
 ( cd /proc/sys/net/ipv4 && grep . ip_local_port_range tcp_tw_reuse tcp_max_tw_buckets tcp_fin_timeout ) > "$DIR/red-cliente.txt"
 
@@ -66,7 +67,8 @@ trap 'kill $EVENTOS $SOCKSTAT $VMSTAT 2> /dev/null' EXIT
 paso "5/7 Corriendo artillery"
 INICIO=$(date +%s)
 echo "$INICIO" > "$DIR/inicio.txt"
-npx artillery run "$ESCENARIO.yaml" -e api --output "$DIR/reporte-artillery.json" 2>&1 | tee "$DIR/resultados-artillery.txt"
+# artillery en cores lentos (E), lejos de la api y de nginx (ver cpuset en docker-compose.yml)
+taskset -c "${ARTILLERY_CPUSET:-12-15}" npx artillery run "$ESCENARIO.yaml" -e api --output "$DIR/reporte-artillery.json" 2>&1 | tee "$DIR/resultados-artillery.txt"
 SALIDA=${PIPESTATUS[0]}
 FIN=$(date +%s)
 echo "$FIN" > "$DIR/fin.txt"
