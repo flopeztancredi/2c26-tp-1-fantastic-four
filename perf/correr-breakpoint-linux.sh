@@ -5,11 +5,13 @@ cd "$(dirname "$0")"
 
 ESCENARIO=exchange-availability-breakpoint
 NOMBRE=""
-while getopts "e:n:" opt; do
+DIR_FIJO=""
+while getopts "e:n:d:" opt; do
   case $opt in
     e) ESCENARIO=$OPTARG ;;
     n) NOMBRE=$OPTARG ;;
-    *) echo "Uso: bash $0 [-e escenario] [-n nombre]"; exit 2 ;;
+    d) DIR_FIJO=$OPTARG ;;
+    *) echo "Uso: bash $0 [-e escenario] [-n nombre] [-d carpeta-completa-de-resultados]"; exit 2 ;;
   esac
 done
 
@@ -21,7 +23,12 @@ NOMBRE=${NOMBRE:-${CORTO}_linux}
 COMPOSE=../docker-compose.yml
 API=http://localhost:5555
 GRAPHITE=http://localhost:8090
-DIR=resultados/$(date +%F)_$NOMBRE
+# -d gana siempre: la usa correr-suite-linux.sh para pasar la MISMA carpeta que ya calculo ella
+# (si cada script calculara la suya con date +%F por separado, una corrida que cruza la
+# medianoche -entre el enfriamiento, el npm ci y el reset- terminaria con dos nombres distintos:
+# el subshell de FALLA nunca veria inicio.txt, y agregar_entorno/la captura apuntarian a una
+# carpeta que no existe)
+DIR=${DIR_FIJO:-resultados/$(date +%F)_$NOMBRE}
 API_REPLICAS=${API_REPLICAS:-1}
 SECO=${SECO:-0}
 

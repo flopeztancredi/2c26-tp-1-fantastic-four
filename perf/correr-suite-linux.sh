@@ -168,8 +168,13 @@ for ESCENARIO in "$@"; do
     paso "Corriendo el escenario medido (correr-breakpoint-linux.sh)"
     # esta llamada NO pasa por ejecutar(): correr-breakpoint-linux.sh ya respeta su propio SECO
     # (heredado del entorno) y con el dry run entero se ve tambien su secuencia interna
-    # (replicas, redis, EXCHANGE_SPIKE_RATE), no solo esta linea como un comando opaco
-    bash correr-breakpoint-linux.sh -e "$ESCENARIO" -n "$NOMBRE"
+    # (replicas, redis, EXCHANGE_SPIKE_RATE), no solo esta linea como un comando opaco.
+    # -d "$RESULT_DIR": le pasamos LA MISMA carpeta que ya calculamos aca arriba, para que
+    # no la recalcule con su propio date +%F. si la corrida cruza la medianoche (enfriamiento +
+    # npm ci + reset pueden tardar), recalcularla adentro daria un nombre de carpeta distinto:
+    # el subshell de FALLA nunca veria inicio.txt y agregar_entorno/la captura apuntarian a una
+    # carpeta que no existe
+    bash correr-breakpoint-linux.sh -e "$ESCENARIO" -n "$NOMBRE" -d "$RESULT_DIR"
     SALIDA=$?
 
     if [ "$SALIDA" -ne 0 ]; then
