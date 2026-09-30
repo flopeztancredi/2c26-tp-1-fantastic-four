@@ -10,8 +10,9 @@ correr todo junto y comparar.
 
 El grupo mide el caso base y cada táctica con los mismos escenarios, para que la comparación entre
 ramas sea válida. Correr cada corrida a mano, una por una, es fácil de hacer distinto entre ramas
-(otro orden, se olvida el calentamiento, no queda tiempo entre corridas). `correr-suite-linux.sh`
-fija ese procedimiento en un script: mismos pasos, mismo orden, mismas R repeticiones.
+(otro orden, no queda enfriamiento entre corridas, se pisan los nombres de carpeta).
+`correr-suite-linux.sh` fija ese procedimiento en un script: mismos pasos, mismo orden, mismas R
+repeticiones.
 
 ## 1. Preparar (antes de una corrida que se vaya a comparar)
 
@@ -35,36 +36,54 @@ bash correr-suite-linux.sh <escenario1> [escenario2 ...]
 ```
 
 Cada `<escenario>` es un YAML sin la extensión, por ejemplo `exchange-availability-breakpoint`.
-Por cada uno, por defecto 3 veces: recrea la api con el estado inicial de la imagen, espera a que
-responda por nginx, corre el calentamiento (`exchange-availability-calentamiento.yaml`, no se
-analiza), espera una quietud para que los paneles bajen a la línea de base, corre el escenario
-medido (`correr-breakpoint-linux.sh`) y captura el dashboard.
+Por cada uno, por defecto 3 veces: enfría (`QUIETUD` segundos, para que los paneles bajen a la
+línea de base de la corrida anterior antes de resetear) y corre el escenario medido
+(`correr-breakpoint-linux.sh`, que hace su propio reset de la api, réplicas, redis si corresponde
+y el calentamiento embebido de cada escenario), y captura el dashboard. No hay un calentamiento
+aparte de la suite: cada escenario trae el suyo si lo necesita (ver la primera fase de
+`exchange-availability-breakpoint.yaml`, por ejemplo).
 
 Opciones por variable de entorno:
 
 | Variable | Qué hace | Default |
 |---|---|---|
 | `REPETICIONES` | Corridas por escenario | 3 |
-| `QUIETUD` | Segundos de descanso entre el calentamiento y la corrida medida | 60 |
-| `API_REPLICAS` | Réplicas de la api (pasa `--scale api=N`) | 1 |
-| `FALLA` | `kill` o `stop`: induce una falla de la api durante la corrida medida | (ninguna) |
+| `QUIETUD` | Segundos de enfriamiento antes de resetear la api, para bajar a la línea de base | 60 |
+| `API_REPLICAS` | Réplicas de la api (lo aplica y lo verifica `correr-breakpoint-linux.sh`) | 1 |
+| `FALLA` | `kill`, `stop` o `crash`: induce una falla de `exchange-api-1` durante la corrida medida | (ninguna) |
 | `FALLA_A` | Segundos desde el inicio de la corrida medida para la falla (obligatorio con `FALLA`) | (ninguno) |
 | `FORZAR` | Corre igual si la máquina está a batería | 0 |
+| `POWER_SUPPLY_DIR` | Directorio con el estado de alimentación (para probar el chequeo sin hardware real) | `/sys/class/power_supply` |
 | `SECO` | Imprime los comandos en vez de correrlos | 0 |
 
-- **`API_REPLICAS` mayor a 1 no anda hoy.** `correr-breakpoint-linux.sh` rechaza más de una
-  réplica de la api, y su propio reset tampoco repite `--scale` (la volvería a bajar a 1 aunque
-  pasara ese chequeo). La opción queda lista para cuando ese script soporte varias réplicas;
-  hasta entonces, dejar el default.
+- **`API_REPLICAS` lo maneja `correr-breakpoint-linux.sh`.** La suite solo lo valida y lo exporta;
+  el reset con `--scale api=N` y la verificación de que arrancaron exactamente N réplicas viven en
+  ese script (ver `GUIA_breakpoint.md`). `FALLA` siempre apunta a `exchange-api-1` (la primera
+  réplica), aunque haya más de una corriendo: sirve igual para ver si esa réplica se recupera y si
+  las demás cubren mientras tanto.
+- **Las tres variantes de `FALLA` disparan cosas distintas en Docker:**
+  - `kill` (`docker kill`, SIGKILL) y `stop` (`docker stop`, SIGTERM + 10 s de gracia): Docker las
+    trata como parada manual y **no** disparan `restart: unless-stopped`.
+  - `crash`: mata el proceso real de la api desde afuera de Docker (`kill -9` vía un container
+    auxiliar con `--pid=host`), que Docker sí interpreta como una caída y dispara la política de
+    reinicio.
 - **`FALLA`/`FALLA_A` sirven para medir recuperación** sin depender de que la carga por sí sola
   alcance a tirar la api. La falla se programa desde el inicio real de la corrida medida
-  (`inicio.txt`, no desde que arranca el runner) y queda registrada con hora en
+  (`inicio.txt`, no desde que arranca el runner), con una espera acotada (no se cuelga para
+  siempre si la corrida no llega a arrancar), y queda registrada con hora en
   `resultados/<carpeta>/falla-inducida.txt`.
+- **Si `correr-breakpoint-linux.sh` falla, la suite aborta** en el acto: no toca la carpeta de esa
+  corrida, corta cualquier `FALLA` pendiente y no sigue con las repeticiones ni escenarios que
+  quedaban.
 - **Revisar con `SECO=1` antes de una corrida larga:** imprime toda la secuencia (comandos de
-  Docker, calentamiento, quietud, nombre de cada carpeta) sin tocar Docker ni Artillery.
+  Docker, enfriamiento, nombre de cada carpeta) sin tocar Docker ni Artillery.
+- **El spike necesita `EXCHANGE_SPIKE_RATE` exportada a mano, sin default.** Tiene que ser 2·B
+  con el B medido en esta máquina (ver `GUIA_breakpoint.md` y `GUIA_stress-recuperacion.md`):
+  `correr-breakpoint-linux.sh` falla (en `SECO=1` también, es una validación, no un comando) si
+  se corre `exchange-availability-spike` sin esa variable seteada.
 
   ```sh
-  SECO=1 bash correr-suite-linux.sh exchange-availability-breakpoint exchange-availability-spike
+  EXCHANGE_SPIKE_RATE=960 SECO=1 bash correr-suite-linux.sh exchange-availability-breakpoint exchange-availability-spike
   ```
 
 ## 3. Capturar

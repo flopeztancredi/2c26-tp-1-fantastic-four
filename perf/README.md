@@ -8,7 +8,6 @@
 | `exchange-availability-stress.yaml` | Corrida 2, stress + recuperación con B = 320 |
 | `exchange-availability-stress-b450.yaml` | Corrida 2, variante con B = 450 como hipótesis |
 | `exchange-availability-spike.yaml` | Corrida cambiaria: pico corto a 2B, todos comprando dólares |
-| `exchange-availability-calentamiento.yaml` | Calentamiento común de la suite (no se analiza) |
 | `exchange-performance-representativa.yaml` | Cliente representativo, llegada constante, mezcla de pares y montos |
 | `correr-breakpoint-docker.ps1` | Corre cualquiera de los YAML en **Windows** |
 | `correr-breakpoint-linux.sh` | Corre cualquiera de los YAML en **Linux** |
@@ -34,15 +33,20 @@ El sistema bajo prueba es el `docker-compose.yml` de la raíz, sin cambios: api 
 
 Los dos siguen los mismos pasos y dejan todo en `resultados/<fecha>_<nombre>/`:
 
-1. Levantan el sistema, verifican que haya una sola réplica de la api y **resetean la api**: recrean su container, así que vuelven los saldos iniciales y el log queda vacío.
-2. Registran los eventos de los containers api y nginx (`die`, `oom`, `restart`) y los sockets del cliente cada 5 s.
+1. Levantan el sistema y **resetean la api** con `API_REPLICAS` réplicas (default 1): recrean su
+   container, así que vuelven los saldos iniciales y el log queda vacío, y verifican que arrancó
+   exactamente esa cantidad. Si el compose tiene un servicio `redis` (rama `tactica/redis`), lo
+   vacía antes de resetear y registra `STATE_ADAPTER` en `entorno.txt`.
+2. Registran los eventos de los containers api (todas las réplicas) y nginx (`die`, `oom`,
+   `restart`) y los sockets del cliente cada 5 s.
 3. Corren artillery con el YAML elegido.
 4. Guardan:
    - saldos antes y después;
-   - estado final de la api;
-   - logs de nginx y api;
+   - estado final de cada réplica de la api;
+   - logs de nginx y de la api;
    - CPU y memoria (cadvisor) y métricas de artillery, exportadas desde graphite;
-   - una copia del YAML usado y el entorno (`entorno.txt`).
+   - una copia del YAML usado y el entorno (`entorno.txt`, con hardware, réplicas, adapter de
+     estado y temperatura de CPU al empezar y al terminar).
 
 | | Windows | Linux |
 |---|---|---|
@@ -80,18 +84,20 @@ Desde `perf/`, con el host enchufado, sin aplicaciones pesadas y con Grafana con
 ## Correr la suite completa (Linux)
 
 Para comparar ramas hay que correr los mismos escenarios, la misma cantidad de veces, en cada
-una. Eso lo automatiza `correr-suite-linux.sh`: por cada escenario y cada corrida, recrea la api
-con el estado inicial, calienta (`exchange-availability-calentamiento.yaml`, no se analiza),
-espera una quietud para que los paneles bajen a la línea de base, corre
-`correr-breakpoint-linux.sh` y al final captura el dashboard con `capturar-grafana.mjs`.
-Procedimiento completo, con qué revisar antes de medir y cómo comparar ramas:
-**`GUIA_suite.md`**.
+una. Eso lo automatiza `correr-suite-linux.sh`: por cada escenario y cada corrida, espera una
+quietud (para que los paneles bajen a la línea de base de la corrida anterior), corre
+`correr-breakpoint-linux.sh` (que hace su propio reset, réplicas y redis si corresponde) y al
+final captura el dashboard con `capturar-grafana.mjs`. También puede inducir una falla de la api
+a mitad de corrida (`FALLA=kill|stop|crash`) para medir recuperación. Procedimiento completo, con
+qué revisar antes de medir, las variables de entorno y cómo comparar ramas: **`GUIA_suite.md`**.
 
 ```sh
-bash correr-suite-linux.sh exchange-availability-breakpoint exchange-availability-spike
+bash correr-suite-linux.sh exchange-availability-breakpoint
+EXCHANGE_SPIKE_RATE=960 bash correr-suite-linux.sh exchange-availability-spike
 ```
 
-Antes de una corrida real, conviene revisar la secuencia sin tocar Docker:
+Antes de una corrida real, conviene revisar la secuencia sin tocar Docker (el spike igual
+necesita `EXCHANGE_SPIKE_RATE`, ver `GUIA_suite.md`):
 
 ```sh
 SECO=1 bash correr-suite-linux.sh exchange-availability-breakpoint

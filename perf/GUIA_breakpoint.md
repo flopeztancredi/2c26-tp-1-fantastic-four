@@ -8,7 +8,7 @@ Los fundamentos del diseño (qué se mide y por qué) están en `DISENO_availabi
 - **Nivel 2:** separar "no responde" de "responde lento" (P95 por escalón).
 - **Nivel 3:** qué tipo de falla aparece (timing, omission, crash o response) y qué recurso llega a su límite.
 
-**Criterio:** % de éxito por escalón = 2xx / (todas las respuestas HTTP + errores de red), con umbral de 99 %. El P95 se informa aparte, sin umbral. **B vale solo para el entorno donde se midió**: Windows y Linux tienen cada uno el suyo.
+**Criterio:** % de éxito por escalón = (2xx + 4xx) / (todas las respuestas HTTP + errores de red), con umbral de 99 % (ver `DISENO_availability.md`, sección 2: cuenta como atendido cualquier respuesta que no sea 5xx; el 429 se muestra también aparte, porque es carga descartada a propósito). El P95 se informa aparte, sin umbral. **B vale solo para el entorno donde se midió**: Windows y Linux tienen cada uno el suyo.
 
 ## Carga (`exchange-availability-breakpoint.yaml`)
 
@@ -25,11 +25,18 @@ Los fundamentos del diseño (qué se mide y por qué) están en `DISENO_availabi
 ## Antes de correr
 
 1. **Host en las mismas condiciones en cada corrida:** notebook enchufada y en alto rendimiento, sin aplicaciones pesadas abiertas y sin otra corrida en curso. Si quedó un container colgado, borrarlo con `docker rm -f artillery`.
-2. **Una sola réplica de la api.** `docker compose -f ../docker-compose.yml ps` no tiene que mostrar `exchange-api-2`. Si aparece, correr `docker compose -f ../docker-compose.yml up -d --scale api=1`. El script también lo verifica.
+2. **Réplicas de la api.** Por default una sola. El script en Linux hace su propio reset con
+   `--scale api=$API_REPLICAS` (default 1) y verifica que haya arrancado exactamente esa
+   cantidad; no hace falta tocar Docker a mano antes de correrlo.
 3. **Grafana** (`http://localhost`, `admin`/`admin`), la primera vez:
    - crear un datasource Graphite llamado exactamente `Graphite`, con URL `http://graphite:80`;
    - importar `perf/dashboard.json`.
-   - En cada corrida, elegir en `server` el prefijo del entorno y en `container` `exchange-api-1` y `exchange-nginx-1` (en Windows, también `artillery`).
+   - `server` y `container` se arman solos consultando graphite, y ya traen un default razonable
+     (el último prefijo usado; `exchange-api-1` y `exchange-nginx-1`). En cada corrida, revisar
+     que `server` sea el prefijo de esta corrida y sumar en `container` otras réplicas
+     (`exchange-api-2`, `exchange-api-3`, ...) o `exchange-redis-1` si corresponde. `container`
+     lista contenedores `exchange-*`: en Windows, el generador (`artillery`) no tiene ese prefijo
+     y no aparece ahí; para verlo, mirar el panel de recursos en cAdvisor directamente.
 
 ## Correr
 
