@@ -9,10 +9,17 @@
 #   - ARS <-> BRL: 10 % (5 % + 5 %)
 # dentro de cada moneda, mitad compra y mitad vende (peso igual entre las dos direcciones).
 #
-# montos: no un valor fijo, sino un rango chico por moneda (500-1500 ARS o 1-5 unidades de
-# la moneda extranjera), la misma escala que ya usan breakpoint/stress/endurance. con esta
-# escala y 80 escenarios/s durante 10 min, el volumen total queda muy por debajo de los saldos
-# iniciales (ver GUIA_endurance-performance.md: a esa escala alcanzan para ~470.000 exchanges).
+# montos: fijos (1000 ARS, 1 unidad de moneda extranjera), igual que breakpoint/stress/endurance.
+# ojo: tienen que ser numeros, no template de artillery. "{{ $randomNumber(...) }}" renderiza
+# STRING aunque este adentro de un campo numerico del json (confirmado con un echo server
+# aislado: baseAmount llegaba como "1018", con comillas). en app/exchange.js el balance se
+# actualiza con += / -=, y += sobre un string concatena en vez de sumar: corrompe saldos en vez
+# de pifiarle solo a la variedad del monto. con esta escala y 80 escenarios/s durante 10 min, el
+# volumen total queda muy por debajo de los saldos iniciales (ver GUIA_endurance-performance.md:
+# a esa escala alcanzan para ~470.000 exchanges).
+# think si se banca el template: "{{ $randomNumber(1, 3) }}" randomiza bien (confirmado con el
+# propio resumen de artillery, session_length min~1000ms max~3000ms), porque think no entra a un
+# json ni a una cuenta: artillery lo usa directo como numero de segundos.
 config:
   environments:
     api:
@@ -50,7 +57,7 @@ scenarios:
           json:
             baseCurrency: "ARS"
             counterCurrency: "USD"
-            baseAmount: "{{ $randomNumber(500, 1500) }}"
+            baseAmount: 1000
             baseAccountId: 101
             counterAccountId: 102
       - get:
@@ -66,7 +73,7 @@ scenarios:
           json:
             baseCurrency: "USD"
             counterCurrency: "ARS"
-            baseAmount: "{{ $randomNumber(1, 3) }}"
+            baseAmount: 1
             baseAccountId: 102
             counterAccountId: 101
       - get:
@@ -82,7 +89,7 @@ scenarios:
           json:
             baseCurrency: "ARS"
             counterCurrency: "EUR"
-            baseAmount: "{{ $randomNumber(500, 1500) }}"
+            baseAmount: 1000
             baseAccountId: 101
             counterAccountId: 103
       - get:
@@ -98,7 +105,7 @@ scenarios:
           json:
             baseCurrency: "EUR"
             counterCurrency: "ARS"
-            baseAmount: "{{ $randomNumber(1, 3) }}"
+            baseAmount: 1
             baseAccountId: 103
             counterAccountId: 101
       - get:
@@ -114,7 +121,7 @@ scenarios:
           json:
             baseCurrency: "ARS"
             counterCurrency: "BRL"
-            baseAmount: "{{ $randomNumber(500, 1500) }}"
+            baseAmount: 1000
             baseAccountId: 101
             counterAccountId: 104
       - get:
@@ -130,7 +137,7 @@ scenarios:
           json:
             baseCurrency: "BRL"
             counterCurrency: "ARS"
-            baseAmount: "{{ $randomNumber(1, 5) }}"
+            baseAmount: 1
             baseAccountId: 104
             counterAccountId: 101
       - get:
