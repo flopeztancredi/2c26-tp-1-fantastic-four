@@ -12,6 +12,7 @@
 #   FALLA=kill|stop  induce una falla de la api durante la corrida medida (docker kill / stop)
 #   FALLA_A=S        segundos desde el inicio de la corrida medida para la falla (obligatorio con FALLA)
 #   FORZAR=1         corre igual si la maquina esta a bateria
+#   POWER_SUPPLY_DIR=ruta  de donde leer el estado de alimentacion (default /sys/class/power_supply)
 #   SECO=1           imprime los comandos en vez de ejecutarlos (para revisar la suite sin medir)
 set -u
 cd "$(dirname "$0")"
@@ -22,6 +23,7 @@ API_REPLICAS=${API_REPLICAS:-1}
 FALLA=${FALLA:-}
 FALLA_A=${FALLA_A:-}
 FORZAR=${FORZAR:-0}
+POWER_SUPPLY_DIR=${POWER_SUPPLY_DIR:-/sys/class/power_supply}
 SECO=${SECO:-0}
 COMPOSE=../docker-compose.yml
 API=http://localhost:5555
@@ -58,15 +60,19 @@ COMMIT=$(git rev-parse --short HEAD 2> /dev/null || echo sin-git)
 CAMBIOS_SIN_COMMITEAR=$(git status --porcelain 2> /dev/null | wc -l | tr -d ' ')
 
 # alimentacion: aborta si esta a bateria, salvo FORZAR=1. se chequea en cada corrida (no solo al
-# arrancar) para no dejar mediciones a mitad de camino si alguien desenchufa la notebook
+# arrancar) para no dejar mediciones a mitad de camino si alguien desenchufa la notebook.
+# ojo con esta funcion llamada como ENCHUFADO=$(chequear_alimentacion): el exit adentro de
+# falla_uso corta el SUBSHELL de la sustitucion de comandos, no el script. bash si propaga ese
+# codigo de salida como el $? de la linea de asignacion (probado), asi que el punto de llamada
+# tiene que chequearlo con "|| exit 1": sin eso el script seguia de largo con bateria
 chequear_alimentacion() {
   local enchufado=0 f
-  for f in /sys/class/power_supply/*/online; do
+  for f in "$POWER_SUPPLY_DIR"/*/online; do
     [ -r "$f" ] || continue
     [ "$(cat "$f" 2> /dev/null)" = "1" ] && enchufado=1
   done
   if [ "$enchufado" -eq 0 ] && [ "$FORZAR" != 1 ]; then
-    falla_uso "la maquina esta a bateria. Enchufala o corre con FORZAR=1 para medir igual"
+    falla_uso "la maquina esta a bateria (revisado en $POWER_SUPPLY_DIR). Enchufala o corre con FORZAR=1 para medir igual"
   fi
   echo "$enchufado"
 }
@@ -100,7 +106,7 @@ for ESCENARIO in "$@"; do
 
   for i in $(seq 1 "$REPETICIONES"); do
     paso "$ESCENARIO, corrida $i/$REPETICIONES"
-    ENCHUFADO=$(chequear_alimentacion)
+    ENCHUFADO=$(chequear_alimentacion) || exit 1
 
     paso "Recreando la api con el estado inicial de la imagen"
     ejecutar docker compose -f "$COMPOSE" up -d
