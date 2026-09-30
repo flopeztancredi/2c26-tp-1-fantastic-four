@@ -49,9 +49,31 @@ function derivarPrefijo() {
   return `artillery-exchange-${corto}`;
 }
 
+// containers de esta corrida (exchange-api-1..N, nginx y redis si corresponde), leyendo
+// API_REPLICAS/STATE_ADAPTER de entorno.txt (los escribe correr-breakpoint-linux.sh). una
+// carpeta vieja que no los tenga (de antes de este campo) asume 1 replica y sin redis.
+function leerContainers() {
+  const p = path.join(carpeta, "entorno.txt");
+  let replicas = 1;
+  let adapter = "archivos";
+  if (fs.existsSync(p)) {
+    const texto = fs.readFileSync(p, "utf8");
+    const mReplicas = texto.match(/^API_REPLICAS=(\d+)$/m);
+    const mAdapter = texto.match(/^STATE_ADAPTER=(\S+)$/m);
+    if (mReplicas) replicas = parseInt(mReplicas[1], 10);
+    if (mAdapter) adapter = mAdapter[1];
+  }
+  const containers = [];
+  for (let i = 1; i <= replicas; i++) containers.push(`exchange-api-${i}`);
+  containers.push("exchange-nginx-1");
+  if (adapter === "redis") containers.push("exchange-redis-1");
+  return containers;
+}
+
 const inicio = leerEntero("inicio.txt");
 const fin = leerEntero("fin.txt");
 const prefijo = prefijoArg ?? derivarPrefijo();
+const containers = leerContainers();
 const from = (inicio - MARGEN_S) * 1000;
 const to = (fin + MARGEN_S) * 1000;
 
@@ -104,6 +126,7 @@ async function main() {
 
   const slug = await obtenerSlug();
   console.log(`Grafana: ${grafanaUrl}, dashboard ${uid}/${slug}, prefijo ${prefijo}`);
+  console.log(`Containers: ${containers.join(", ")}`);
   console.log(`Rango: ${new Date(from).toISOString()} a ${new Date(to).toISOString()}`);
 
   const browser = await puppeteer.launch({
@@ -129,6 +152,8 @@ async function main() {
         "var-server": prefijo,
         theme: "light",
       });
+      // multivalor: hay que repetir la clave, una asignacion con comas no selecciona varios
+      for (const c of containers) params.append("var-container", c);
       const url = `${grafanaUrl}/d-solo/${uid}/${slug}?${params}`;
       const archivo = path.join(destino, nombreArchivo(panel));
       process.stdout.write(`Panel ${panel.id} (${panel.title})... `);
