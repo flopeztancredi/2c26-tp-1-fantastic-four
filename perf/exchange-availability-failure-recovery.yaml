@@ -1,0 +1,32 @@
+config:
+  environments:
+    api:
+      target: "http://localhost:5555"
+      plugins:
+        statsd:
+          host: localhost
+          port: 8125
+          prefix: "artillery-exchange-failure-recovery"
+
+  http:
+    timeout: 10
+
+  phases:
+    - name: "Linea base antes de la caida"
+      duration: 60
+      arrivalRate: 160
+    - name: "Observacion despues de la caida"
+      duration: 120
+      arrivalRate: 160
+
+scenarios:
+  - name: "Consulta de rates"
+    weight: 1
+    flow:
+      - get:
+          url: "/rates"
+  - name: "Health check"
+    weight: 1
+    flow:
+      - get:
+          url: "/health"
