@@ -13,7 +13,9 @@ while getopts "e:n:" opt; do
   esac
 done
 
-CORTO=$(echo "$ESCENARIO" | sed -E 's/^exchange-(availability|performance|metricas)-//')
+# CORTO es todo lo que sigue a "exchange-<categoria>-" (categoria = una palabra: availability,
+# performance, metricas, integridad, etc.). Nuevas categorias andan solas, no hace falta listarlas.
+CORTO=$(echo "$ESCENARIO" | sed -E 's/^exchange-[^-]+-//')
 PREFIJO=artillery-exchange-$CORTO
 NOMBRE=${NOMBRE:-${CORTO}_linux}
 COMPOSE=../docker-compose.yml

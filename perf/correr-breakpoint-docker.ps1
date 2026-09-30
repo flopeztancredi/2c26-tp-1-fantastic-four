@@ -10,7 +10,9 @@ $ErrorActionPreference = "Continue"
 Set-Location $PSScriptRoot
 
 $Compose  = Join-Path $PSScriptRoot "..\docker-compose.yml"
-$Corto    = $Escenario -replace '^exchange-(availability|performance|metricas)-', ''
+# Corto es todo lo que sigue a "exchange-<categoria>-" (categoria = una palabra: availability,
+# performance, metricas, integridad, etc.). Nuevas categorias andan solas, no hace falta listarlas.
+$Corto    = $Escenario -replace '^exchange-[^-]+-', ''
 $Prefijo  = "artillery-exchange-$Corto-docker"
 if (-not $Nombre) { $Nombre = "$($Corto)_docker" }
 $Red      = "exchange_default"
