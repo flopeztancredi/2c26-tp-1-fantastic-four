@@ -1,0 +1,54 @@
+# Availability ante pedidos invalidos: carga constante de 0.5B (160 req/s) durante 3 min.
+# Entre los segundos 60 y 70, pedido-invalido.js manda ~12 % de los POST /exchange con una moneda que no existe.
+# Pregunta: un pedido mal armado, ¿deja al servicio fuera de linea? Ver README.md.
+config:
+  processor: "./pedido-invalido.js"
+  environments:
+    api:
+      target: 'http://localhost:5555'
+      plugins:
+        statsd:
+          host: localhost
+          port: 8125
+          prefix: "artillery-exchange-pedido-invalido"
+    docker:
+      target: 'http://nginx'
+      plugins:
+        statsd:
+          host: graphite
+          port: 8125
+          prefix: "artillery-exchange-pedido-invalido-docker"
+
+  http:
+    timeout: 10
+
+  phases:
+    - name: "Carga constante 0.5B (pedidos invalidos entre los 60 y 70 s)"
+      duration: 180
+      arrivalRate: 160
+
+scenarios:
+  - name: "Exchange ARS -> USD"
+    weight: 1
+    flow:
+      - post:
+          url: '/exchange'
+          beforeRequest: "inyectarPedidoInvalido"
+          json:
+            baseCurrency: "ARS"
+            counterCurrency: "USD"
+            baseAmount: 1000
+            baseAccountId: 101
+            counterAccountId: 102
+  - name: "Exchange USD -> ARS"
+    weight: 1
+    flow:
+      - post:
+          url: '/exchange'
+          beforeRequest: "inyectarPedidoInvalido"
+          json:
+            baseCurrency: "USD"
+            counterCurrency: "ARS"
+            baseAmount: 1
+            baseAccountId: 102
+            counterAccountId: 101
