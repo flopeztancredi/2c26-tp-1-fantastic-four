@@ -39,6 +39,25 @@ export function getLog() {
   return log;
 }
 
+//true if there is an internal account for the currency
+export function isKnownCurrency(currency) {
+  return findAccountByCurrency(currency) != null;
+}
+
+//true if there is an internal account with that id
+export function isKnownAccount(accountId) {
+  return findAccountById(accountId) != null;
+}
+
+//true if the pair has a numeric rate and both currencies have an internal account
+export function isSupportedPair(baseCurrency, counterCurrency) {
+  return (
+    isKnownCurrency(baseCurrency) &&
+    isKnownCurrency(counterCurrency) &&
+    Number.isFinite(rates[baseCurrency]?.[counterCurrency])
+  );
+}
+
 //sets the exchange rate for a given pair of currencies, and the reciprocal rate as well
 export function setRate(rateRequest) {
   const { baseCurrency, counterCurrency, rate } = rateRequest;

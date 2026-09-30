@@ -8,6 +8,9 @@ import {
   setRate,
   getLog,
   exchange,
+  isKnownCurrency,
+  isKnownAccount,
+  isSupportedPair,
 } from "./exchange.js";
 
 await exchangeInit();
@@ -16,6 +19,35 @@ const app = express();
 const port = 3000;
 
 app.use(express.json());
+
+// VALIDATION (parameter typing / fence): se rechaza el pedido antes de ejecutar nada,
+// indicando el primer campo inválido
+
+const isPositiveNumber = (v) => typeof v === "number" && Number.isFinite(v) && v > 0;
+const isCurrencyCode = (v) => typeof v === "string" && /^[A-Z]{3}$/.test(v);
+const isAccountId = (v) => (typeof v === "string" && v.length > 0) || Number.isInteger(v);
+
+function validateExchange(body) {
+  const { baseCurrency, counterCurrency, baseAccountId, counterAccountId, baseAmount } = body;
+  if (!isCurrencyCode(baseCurrency)) return "baseCurrency must be a 3-letter currency code";
+  if (!isCurrencyCode(counterCurrency)) return "counterCurrency must be a 3-letter currency code";
+  if (baseCurrency === counterCurrency) return "baseCurrency and counterCurrency must be different";
+  if (!isSupportedPair(baseCurrency, counterCurrency))
+    return `exchange ${baseCurrency}->${counterCurrency} is not supported`;
+  if (!isPositiveNumber(baseAmount)) return "baseAmount must be a positive number";
+  if (!isAccountId(baseAccountId)) return "baseAccountId is required";
+  if (!isAccountId(counterAccountId)) return "counterAccountId is required";
+  return null;
+}
+
+function validateRate(body) {
+  const { baseCurrency, counterCurrency, rate } = body;
+  if (!isKnownCurrency(baseCurrency)) return "baseCurrency must be a currency with an internal account";
+  if (!isKnownCurrency(counterCurrency)) return "counterCurrency must be a currency with an internal account";
+  if (baseCurrency === counterCurrency) return "baseCurrency and counterCurrency must be different";
+  if (!isPositiveNumber(rate)) return "rate must be a positive number";
+  return null;
+}
 
 // ACCOUNT endpoints
 
@@ -27,8 +59,11 @@ app.put("/accounts/:id/balance", (req, res) => {
   const accountId = req.params.id;
   const { balance } = req.body;
 
-  if (!accountId || !balance) {
-    return res.status(400).json({ error: "Malformed request" });
+  if (!isKnownAccount(accountId)) {
+    return res.status(404).json({ error: `account ${accountId} not found` });
+  }
+  if (typeof balance !== "number" || !Number.isFinite(balance) || balance < 0) {
+    return res.status(400).json({ error: "balance must be a non-negative number" });
   } else {
     setAccountBalance(accountId, balance);
 
@@ -43,10 +78,9 @@ app.get("/rates", (req, res) => {
 });
 
 app.put("/rates", (req, res) => {
-  const { baseCurrency, counterCurrency, rate } = req.body;
-
-  if (!baseCurrency || !counterCurrency || !rate) {
-    return res.status(400).json({ error: "Malformed request" });
+  const error = validateRate(req.body);
+  if (error) {
+    return res.status(400).json({ error });
   }
 
   const newRateRequest = { ...req.body };
@@ -63,33 +97,40 @@ app.get("/log", (req, res) => {
 
 // EXCHANGE endpoint
 
-app.post("/exchange", async (req, res) => {
-  const {
-    baseCurrency,
-    counterCurrency,
-    baseAccountId,
-    counterAccountId,
-    baseAmount,
-  } = req.body;
-
-  if (
-    !baseCurrency ||
-    !counterCurrency ||
-    !baseAccountId ||
-    !counterAccountId ||
-    !baseAmount
-  ) {
-    return res.status(400).json({ error: "Malformed request" });
+app.post("/exchange", async (req, res, next) => {
+  const error = validateExchange(req.body);
+  if (error) {
+    return res.status(400).json({ error });
   }
 
-  const exchangeRequest = { ...req.body };
-  const exchangeResult = await exchange(exchangeRequest);
+  // EXCEPTION HANDLING: una excepción en este pedido responde error a este pedido
+  // y no termina el proceso (antes, la promesa rechazada sin manejar lo mataba)
+  try {
+    const exchangeRequest = { ...req.body };
+    const exchangeResult = await exchange(exchangeRequest);
 
-  if (exchangeResult.ok) {
-    res.status(200).json(exchangeResult);
-  } else {
-    res.status(500).json(exchangeResult);
+    if (exchangeResult.ok) {
+      res.status(200).json(exchangeResult);
+    } else {
+      res.status(500).json(exchangeResult);
+    }
+  } catch (err) {
+    next(err);
   }
+});
+
+// errores de cualquier handler: JSON sin stack trace (el detalle queda en el log del servidor)
+app.use((err, req, res, next) => {
+  if (err.type === "entity.parse.failed") {
+    return res.status(400).json({ error: "body must be valid JSON" });
+  }
+  console.error(`[${new Date().toISOString()}] ${req.method} ${req.url} failed:`, err);
+  res.status(500).json({ error: "internal error" });
+});
+
+// red de seguridad: una promesa rechazada fuera de un handler se registra pero no termina el proceso
+process.on("unhandledRejection", (err) => {
+  console.error(`[${new Date().toISOString()}] unhandled rejection:`, err);
 });
 
 app.listen(port, () => {
