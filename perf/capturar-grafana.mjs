@@ -50,23 +50,27 @@ function derivarPrefijo() {
 }
 
 // containers de esta corrida (exchange-api-1..N, nginx y redis si corresponde), leyendo
-// API_REPLICAS/STATE_ADAPTER de entorno.txt (los escribe correr-breakpoint-linux.sh). una
-// carpeta vieja que no los tenga (de antes de este campo) asume 1 replica y sin redis.
+// API_REPLICAS/HAY_REDIS de entorno.txt (los escribe correr-breakpoint-linux.sh). ojo: la
+// etiqueta del adapter real es ESTADO_API, no STATE_ADAPTER (esa es la variable de entorno que
+// lee la propia api en tactica/redis; usar el mismo nombre para esto la pisaria). HAY_REDIS es
+// un booleano aparte, puesto por un chequeo directo de "hay un container redis corriendo", no
+// una suposicion sobre el texto de ESTADO_API. una carpeta vieja que no tenga estos campos (de
+// antes de este cambio) asume 1 replica y sin redis.
 function leerContainers() {
   const p = path.join(carpeta, "entorno.txt");
   let replicas = 1;
-  let adapter = "archivos";
+  let hayRedis = false;
   if (fs.existsSync(p)) {
     const texto = fs.readFileSync(p, "utf8");
     const mReplicas = texto.match(/^API_REPLICAS=(\d+)$/m);
-    const mAdapter = texto.match(/^STATE_ADAPTER=(\S+)$/m);
+    const mRedis = texto.match(/^HAY_REDIS=(\d)$/m);
     if (mReplicas) replicas = parseInt(mReplicas[1], 10);
-    if (mAdapter) adapter = mAdapter[1];
+    if (mRedis) hayRedis = mRedis[1] === "1";
   }
   const containers = [];
   for (let i = 1; i <= replicas; i++) containers.push(`exchange-api-${i}`);
   containers.push("exchange-nginx-1");
-  if (adapter === "redis") containers.push("exchange-redis-1");
+  if (hayRedis) containers.push("exchange-redis-1");
   return containers;
 }
 

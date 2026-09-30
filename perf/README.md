@@ -35,8 +35,11 @@ Los dos siguen los mismos pasos y dejan todo en `resultados/<fecha>_<nombre>/`:
 
 1. Levantan el sistema y **resetean la api** con `API_REPLICAS` réplicas (default 1): recrean su
    container, así que vuelven los saldos iniciales y el log queda vacío, y verifican que arrancó
-   exactamente esa cantidad. Si el compose tiene un servicio `redis` (rama `tactica/redis`), lo
-   vacía antes de resetear y registra `STATE_ADAPTER` en `entorno.txt`.
+   exactamente esa cantidad. Si hay un container `redis` corriendo (rama `tactica/redis`), lo
+   vacía antes de resetear y registra `ESTADO_API` (el valor real, leído del container con
+   `docker inspect`) y `HAY_REDIS` en `entorno.txt`. La etiqueta usa ese nombre, no
+   `STATE_ADAPTER`: esa es la variable que lee la propia api para elegir su adapter, y
+   reasignarla acá pisaría el valor real si ya venía exportada desde afuera.
 2. Registran los eventos de los containers api (todas las réplicas) y nginx (`die`, `oom`,
    `restart`) y los sockets del cliente cada 5 s.
 3. Corren artillery con el YAML elegido.

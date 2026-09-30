@@ -88,18 +88,26 @@ ejecutar npm ci --silent || falla "npm ci"
 paso "2/7 Levantando el sistema"
 ejecutar docker compose -f $COMPOSE up -d || falla "docker compose up"
 
-# preparado para tactica/redis (otra rama): si el compose declara un servicio "redis", se vacia
-# antes de resetear la api, asi el adapter de estado arranca de nuevo sembrando desde app/state
-# en vez de reusar lo que haya quedado de la corrida anterior. si no hay redis, sigue como hoy
-# (estado en los archivos .json de la imagen)
-STATE_ADAPTER=archivos
+# preparado para tactica/redis (otra rama): si hay un container redis CORRIENDO en el proyecto
+# (no alcanza con que este declarado en el compose), se vacia antes de resetear la api, asi el
+# adapter de estado arranca de nuevo sembrando desde app/state en vez de reusar lo que haya
+# quedado de la corrida anterior. si no hay redis, sigue como hoy (estado en los .json de la imagen)
+#
+# ojo: ESTE nombre de variable, a proposito, no es STATE_ADAPTER. tactica/redis usa esa misma
+# variable de entorno para que la api elija su adapter (docker compose se la pasa al container).
+# si este script la reasignara aca (aunque no le ponga "export"), y alguien la corre con
+# STATE_ADAPTER ya exportada en su shell (para elegir el adapter de la propia api), quedaria
+# pisada con el valor que le pusieramos nosotros de aca en adelante para TODO lo que la herede
+# (docker compose incluido: una asignacion sobre una variable ya exportada sigue exportada con
+# el valor nuevo). probado: STATE_ADAPTER=file bash -c 'STATE_ADAPTER=archivos; sh -c "echo \$STATE_ADAPTER"'
+# imprime "archivos", no "file". la etiqueta para entorno.txt/graficos usa su propio nombre
+# (ESTADO_API) y el valor real se lee del container DESPUES del reset, nunca al reves
+HAY_REDIS=0
 if [ "$SECO" = 1 ]; then
-  echo "+ docker compose -f $COMPOSE config --services"
-  echo "+ (si aparece 'redis' en esa lista: docker compose -f $COMPOSE exec -T redis redis-cli FLUSHALL, y STATE_ADAPTER=redis)"
+  echo "+ (si hay un container exchange-redis-1 corriendo: docker compose -f $COMPOSE exec -T redis redis-cli FLUSHALL)"
 else
-  SERVICIOS=$(docker compose -f $COMPOSE config --services 2> /dev/null || echo "")
-  if echo "$SERVICIOS" | grep -qx redis; then
-    STATE_ADAPTER=redis
+  if docker ps --format '{{.Names}}' | grep -qx exchange-redis-1; then
+    HAY_REDIS=1
     paso "Vaciando redis (el adapter vuelve a sembrar desde app/state)"
     docker compose -f $COMPOSE exec -T redis redis-cli FLUSHALL > /dev/null || falla "redis-cli FLUSHALL"
   fi
@@ -109,9 +117,14 @@ paso "Reseteando la api ($API_REPLICAS replica(s))"
 ejecutar docker compose -f $COMPOSE up -d --build --force-recreate --scale "api=$API_REPLICAS" api || falla "reset de la api"
 if [ "$SECO" = 1 ]; then
   echo "+ (verificar con docker ps que corren exactamente $API_REPLICAS replicas: $(replicas_api | tr '\n' ' '))"
+  ESTADO_API=archivos
 else
   CORRIENDO=$(docker ps --format '{{.Names}}' | grep -c -E '^exchange-api-[0-9]+$')
   [ "$CORRIENDO" = "$API_REPLICAS" ] || falla "se esperaban $API_REPLICAS replica(s) de la api y hay $CORRIENDO corriendo"
+  # valor REAL del adapter, leido del container recien recreado (no adivinado por este script)
+  ESTADO_API=$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' exchange-api-1 2> /dev/null \
+    | sed -n 's/^STATE_ADAPTER=//p' | head -n1)
+  ESTADO_API=${ESTADO_API:-archivos}
 fi
 
 if [ "$SECO" = 1 ]; then
@@ -126,14 +139,15 @@ ejecutar cp "$ESCENARIO.yaml" "$DIR/"
 paso "3/7 Registrando el entorno"
 TEMP_INICIO=$(temp_cpu)
 if [ "$SECO" = 1 ]; then
-  echo "+ (registrar uname/lscpu/free/swapon/docker version/node -v/API_REPLICAS=$API_REPLICAS/STATE_ADAPTER=$STATE_ADAPTER/cpuset de $(replicas_api | tr '\n' ' ')exchange-nginx-1/ARTILLERY_CPUSET/EXCHANGE_SPIKE_RATE en $DIR/entorno.txt)"
+  echo "+ (registrar uname/lscpu/free/swapon/docker version/node -v/API_REPLICAS=$API_REPLICAS/ESTADO_API=$ESTADO_API/HAY_REDIS=$HAY_REDIS/cpuset de $(replicas_api | tr '\n' ' ')exchange-nginx-1/ARTILLERY_CPUSET/EXCHANGE_SPIKE_RATE en $DIR/entorno.txt)"
   echo "+ (registrar ip_local_port_range/tcp_tw_reuse/tcp_max_tw_buckets/tcp_fin_timeout en $DIR/red-cliente.txt)"
 else
   { uname -a; lscpu | grep -E 'Model name|^CPU\(s\)|Thread'; free -h; swapon --show
     docker version --format 'Engine {{.Server.Version}}'; docker compose version
     node -v
     echo "API_REPLICAS=$API_REPLICAS"
-    echo "STATE_ADAPTER=$STATE_ADAPTER"
+    echo "ESTADO_API=$ESTADO_API"
+    echo "HAY_REDIS=$HAY_REDIS"
     docker inspect -f '{{.Name}}: Memory={{.HostConfig.Memory}} MemorySwap={{.HostConfig.MemorySwap}} CpusetCpus={{.HostConfig.CpusetCpus}}' \
       $(replicas_api) exchange-nginx-1
     echo "ARTILLERY_CPUSET=${ARTILLERY_CPUSET:-12-15}"
@@ -203,7 +217,10 @@ else
     docker inspect -f '{{.Name}} {{.State.Status}} OOMKilled={{.State.OOMKilled}} ExitCode={{.State.ExitCode}} Restarts={{.RestartCount}}' "$c" \
       >> "$DIR/estado-api-despues.txt"
   done
-  ESTADO=$(cat "$DIR/estado-api-despues.txt" | tr '\n' ' | ')
+  # tr '\n' ' | ' NO hace lo que parece: tr mapea caracter a caracter, y con un set2 de 3
+  # caracteres solo usa el primero (' '), asi que " | " se perdia en silencio. mismo patron que
+  # ya se usaba abajo para EVENTOS_TXT
+  ESTADO=$(paste -sd '|' "$DIR/estado-api-despues.txt" | sed 's/|/ | /g')
   docker logs --since "$INICIO" exchange-nginx-1 > "$DIR/nginx-access.log" 2> "$DIR/nginx-error.log"
   : > "$DIR/api-stdout.log"; : > "$DIR/api-stderr.log"
   for c in $(replicas_api); do
@@ -227,9 +244,12 @@ exportar() {
 # con 1 replica, el patron es igual al de siempre (exchange-api-1); con mas de 1, comodin
 PATRON_API=exchange-api-1
 [ "$API_REPLICAS" -gt 1 ] && PATRON_API='exchange-api-*'
+CONTAINERS_RECURSOS="$PATRON_API,exchange-nginx-1"
+# con redis, tambien su cpu/memoria: la guia de la tactica compara ese costo contra el caso base
+[ "$HAY_REDIS" = 1 ] && CONTAINERS_RECURSOS="$CONTAINERS_RECURSOS,exchange-redis-1"
 exportar datos-recursos.json \
-  "stats.gauges.cadvisor.{$PATRON_API,exchange-nginx-1}.cpu_cumulative_usage" \
-  "stats.gauges.cadvisor.{$PATRON_API,exchange-nginx-1}.memory_working_set"
+  "stats.gauges.cadvisor.{$CONTAINERS_RECURSOS}.cpu_cumulative_usage" \
+  "stats.gauges.cadvisor.{$CONTAINERS_RECURSOS}.memory_working_set"
 exportar datos-artillery-graphite.json "stats.gauges.$PREFIJO.*" "stats.gauges.$PREFIJO.*.*"
 
 paso "Listo"
