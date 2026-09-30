@@ -23,6 +23,9 @@
 #   FORZAR=1               corre igual si la maquina esta a bateria
 #   POWER_SUPPLY_DIR=ruta  de donde leer el estado de alimentacion (default /sys/class/power_supply)
 #   SECO=1                 imprime los comandos en vez de ejecutarlos (para revisar la suite sin medir)
+#   DESPUES_DE_CORRIDA=cmd  comando que se corre al final de cada corrida, con la carpeta de
+#                          resultados como $1, antes del reset de la siguiente (la api sigue viva):
+#                          sirve para guardar lo que la suite no guarda, como GET /log
 set -u
 cd "$(dirname "$0")"
 
@@ -34,6 +37,7 @@ FALLA_A=${FALLA_A:-}
 FORZAR=${FORZAR:-0}
 POWER_SUPPLY_DIR=${POWER_SUPPLY_DIR:-/sys/class/power_supply}
 SECO=${SECO:-0}
+DESPUES_DE_CORRIDA=${DESPUES_DE_CORRIDA:-}
 COMPOSE=../docker-compose.yml
 LOCK=/tmp/arvault-midiendo.lock
 
@@ -207,6 +211,13 @@ for ESCENARIO in "$@"; do
 
     paso "Capturando el dashboard de Grafana"
     ejecutar node capturar-grafana.mjs "$RESULT_DIR"
+
+    # el comando del usuario no corta la suite si falla: lo que guarda es un agregado a la corrida
+    if [ -n "$DESPUES_DE_CORRIDA" ]; then
+      paso "Despues de la corrida: $DESPUES_DE_CORRIDA"
+      ejecutar bash -c "$DESPUES_DE_CORRIDA" despues-de-corrida "$RESULT_DIR" \
+        || echo "aviso: DESPUES_DE_CORRIDA termino con error en $RESULT_DIR" >&2
+    fi
   done
 done
 
