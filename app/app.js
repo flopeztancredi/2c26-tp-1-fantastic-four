@@ -15,6 +15,7 @@ import {
 import { createFileAdapter } from "./repository/file-adapter.js";
 import { createRedisAdapter } from "./repository/redis-adapter.js";
 import { InsufficientFundsError } from "./errors.js";
+import { createIdempotencyMiddleware } from "./idempotency.js";
 import { config } from "./config.js";
 
 const repository =
@@ -114,7 +115,7 @@ app.get("/log", asyncHandler(async (req, res) => {
 
 // EXCHANGE endpoint
 
-app.post("/exchange", asyncHandler(async (req, res) => {
+app.post("/exchange", createIdempotencyMiddleware(), asyncHandler(async (req, res) => {
   const error = await validateExchange(req.body);
   if (error) {
     return res.status(400).json({ error });
