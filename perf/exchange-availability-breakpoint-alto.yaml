@@ -1,0 +1,88 @@
+# Breakpoint con escalones de 80 req/s hasta 1120 req/s, para llegar al B del caso base y del integrado.
+config:
+  environments:
+    api:
+      target: 'http://localhost:5555'
+      plugins:
+        statsd:
+          host: localhost
+          port: 8125
+          prefix: "artillery-exchange-breakpoint-alto"
+    docker:
+      target: 'http://nginx'
+      plugins:
+        statsd:
+          host: graphite
+          port: 8125
+          prefix: "artillery-exchange-breakpoint-alto-docker"
+
+  http:
+    timeout: 10
+
+  phases:
+    - name: "Calentamiento 80 req/s"
+      duration: 30
+      arrivalRate: 80
+    - name: "Escalon 160 req/s"
+      duration: 60
+      arrivalRate: 160
+    - name: "Escalon 240 req/s"
+      duration: 60
+      arrivalRate: 240
+    - name: "Escalon 320 req/s"
+      duration: 60
+      arrivalRate: 320
+    - name: "Escalon 400 req/s"
+      duration: 60
+      arrivalRate: 400
+    - name: "Escalon 480 req/s"
+      duration: 60
+      arrivalRate: 480
+    - name: "Escalon 560 req/s"
+      duration: 60
+      arrivalRate: 560
+    - name: "Escalon 640 req/s"
+      duration: 60
+      arrivalRate: 640
+    - name: "Escalon 720 req/s"
+      duration: 60
+      arrivalRate: 720
+    - name: "Escalon 800 req/s"
+      duration: 60
+      arrivalRate: 800
+    - name: "Escalon 880 req/s"
+      duration: 60
+      arrivalRate: 880
+    - name: "Escalon 960 req/s"
+      duration: 60
+      arrivalRate: 960
+    - name: "Escalon 1040 req/s"
+      duration: 60
+      arrivalRate: 1040
+    - name: "Escalon 1120 req/s"
+      duration: 60
+      arrivalRate: 1120
+
+scenarios:
+  - name: "Exchange ARS -> USD"
+    weight: 1
+    flow:
+      - post:
+          url: '/exchange'
+          json:
+            baseCurrency: "ARS"
+            counterCurrency: "USD"
+            baseAmount: 1000
+            baseAccountId: 101
+            counterAccountId: 102
+  - name: "Exchange USD -> ARS"
+    weight: 1
+    flow:
+      - post:
+          url: '/exchange'
+          json:
+            baseCurrency: "USD"
+            counterCurrency: "ARS"
+            baseAmount: 1
+            baseAccountId: 102
+            counterAccountId: 101
