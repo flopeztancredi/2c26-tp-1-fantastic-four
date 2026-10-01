@@ -4,6 +4,8 @@ import { createClient } from "redis";
 import path from "path";
 import fs from "fs";
 
+import { assertReciprocal } from "../rates.js";
+
 const RESERVE_SCRIPT = `
 local balance = tonumber(redis.call("HGET", KEYS[1], ARGV[1]))
 
@@ -69,7 +71,7 @@ export async function createRedisAdapter(url) {
         .multi()
         .hSet("rates", {
           [`${baseCurrency}:${counterCurrency}`]: String(rate),
-          [`${counterCurrency}:${baseCurrency}`]: String(Number((1 / rate).toFixed(5))),
+          [`${counterCurrency}:${baseCurrency}`]: String(1 / rate),
         })
         .xAdd("audit", "*", { data: JSON.stringify(audit) })
         .exec();
@@ -114,12 +116,14 @@ export async function createRedisAdapter(url) {
 
 //loads accounts and rates from app/state into redis the first time, SET NX so only one replica does it
 async function seed(client) {
+  const accounts = readState("accounts.json");
+  const rates = readState("rates.json");
+  assertReciprocal(rates, "rates.json");
+
   if (!(await client.set("seeded", "1", { NX: true }))) {
     return;
   }
 
-  const accounts = readState("accounts.json");
-  const rates = readState("rates.json");
   const multi = client.multi();
 
   for (const account of accounts) {

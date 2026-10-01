@@ -100,5 +100,5 @@ test("setRate also sets the reciprocal rate", async (t) => {
   await exchange.setRate({ baseCurrency: "USD", counterCurrency: "ARS", rate: 1500 });
 
   assert.equal(state.rates.USD.ARS, 1500);
-  assert.equal(state.rates.ARS.USD, Number((1 / 1500).toFixed(5)));
+  assert.equal(state.rates.ARS.USD, 1 / 1500);
 });

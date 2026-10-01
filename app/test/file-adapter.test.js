@@ -3,6 +3,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
+import fs from "fs/promises";
+import os from "os";
+import path from "path";
+
 import { createFileAdapter } from "../repository/file-adapter.js";
 
 test("loads accounts, rates and log", async () => {
@@ -57,4 +61,22 @@ test("concurrent reservations never go negative", async () => {
 
   assert.equal(results.filter(Boolean).length, 6);
   assert.equal(brl.balance, 0);
+});
+
+test("an unreadable state file stops the adapter", async (t) => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "arvault-broken-"));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  await fs.cp(`${import.meta.dirname}/../state`, dir, { recursive: true });
+  await fs.writeFile(path.join(dir, "accounts.json"), "[{");
+
+  await assert.rejects(createFileAdapter({ dir, persist: false }));
+});
+
+test("rates that are not reciprocal stop the adapter", async (t) => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "arvault-rates-"));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  await fs.cp(`${import.meta.dirname}/../state`, dir, { recursive: true });
+  await fs.writeFile(path.join(dir, "rates.json"), JSON.stringify({ ARS: { USD: 0.001 }, USD: { ARS: 900 } }));
+
+  await assert.rejects(createFileAdapter({ dir, persist: false }));
 });

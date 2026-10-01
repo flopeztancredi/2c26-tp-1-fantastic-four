@@ -20,7 +20,7 @@ export function createFakeRepository({ accounts, rates }) {
     async setRate({ baseCurrency, counterCurrency, rate }, auditEntry) {
       audit.push(auditEntry);
       rates[baseCurrency][counterCurrency] = rate;
-      rates[counterCurrency][baseCurrency] = Number((1 / rate).toFixed(5));
+      rates[counterCurrency][baseCurrency] = 1 / rate;
     },
 
     async getLog() {

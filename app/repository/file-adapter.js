@@ -3,6 +3,8 @@
 import path from "path";
 import fs from "fs";
 
+import { assertReciprocal } from "../rates.js";
+
 //tests pass persist false so they do not write the state files
 export async function createFileAdapter({ dir, persist = true }) {
   const accountsFile = path.join(dir, "accounts.json");
@@ -12,6 +14,7 @@ export async function createFileAdapter({ dir, persist = true }) {
 
   const accounts = await load(accountsFile);
   const rates = await load(ratesFile);
+  assertReciprocal(rates, ratesFile);
   await migrateLegacyLog(path.join(dir, "log.json"), logFile);
 
   const timers = [];
@@ -56,7 +59,7 @@ export async function createFileAdapter({ dir, persist = true }) {
     async setRate({ baseCurrency, counterCurrency, rate }, audit) {
       await appendLine(auditFile, audit);
       rates[baseCurrency][counterCurrency] = rate;
-      rates[counterCurrency][baseCurrency] = Number((1 / rate).toFixed(5));
+      rates[counterCurrency][baseCurrency] = 1 / rate;
     },
 
     async getLog() {
@@ -115,18 +118,12 @@ function findAccountById(accounts, id) {
   return null;
 }
 
+//an unreadable state file stops the api: better than serving without it
 async function load(filePath) {
   try {
-    await fs.promises.access(filePath);
-    const raw = await fs.promises.readFile(filePath, "utf8");
-
-    return JSON.parse(raw);
+    return JSON.parse(await fs.promises.readFile(filePath, "utf8"));
   } catch (err) {
-    if (err.code == "ENOENT") {
-      console.error(`${filePath} not found`);
-    } else {
-      console.error(`Error loading ${filePath}:`, err);
-    }
+    throw new Error(`cannot load ${filePath}: ${err.message}`);
   }
 }
 
@@ -134,21 +131,23 @@ async function appendLine(filePath, entry) {
   await fs.promises.appendFile(filePath, JSON.stringify(entry) + "\n");
 }
 
+//a line cut by a crash is skipped with a warning instead of losing the whole log
 async function loadLog(filePath) {
-  try {
-    const raw = await fs.promises.readFile(filePath, "utf8");
-
-    return raw
-      .split("\n")
-      .filter(Boolean)
-      .map((line) => JSON.parse(line));
-  } catch (err) {
-    if (err.code != "ENOENT") {
-      console.error(`Error loading ${filePath}:`, err);
-    }
-
+  if (!fs.existsSync(filePath)) {
     return [];
   }
+
+  const entries = [];
+
+  for (const line of (await fs.promises.readFile(filePath, "utf8")).split("\n").filter(Boolean)) {
+    try {
+      entries.push(JSON.parse(line));
+    } catch {
+      console.error(`${filePath}: skipped an unreadable line`);
+    }
+  }
+
+  return entries;
 }
 
 async function migrateLegacyLog(legacyPath, logPath) {
@@ -160,9 +159,11 @@ async function migrateLegacyLog(legacyPath, logPath) {
   await fs.promises.writeFile(logPath, entries.map((entry) => JSON.stringify(entry) + "\n").join(""));
 }
 
+//writes a temp file and renames it, so a crash never leaves a half written file
 async function save(data, filePath) {
   try {
-    await fs.promises.writeFile(filePath, JSON.stringify(data, null, 2));
+    await fs.promises.writeFile(`${filePath}.tmp`, JSON.stringify(data, null, 2));
+    await fs.promises.rename(`${filePath}.tmp`, filePath);
   } catch (err) {
     console.error(`Error writing to ${filePath}:`, err);
   }

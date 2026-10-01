@@ -106,5 +106,5 @@ test("setRate also sets the reciprocal rate", { skip }, async (t) => {
 
   const rates = await adapter.getRates();
   assert.equal(rates.USD.ARS, 1600);
-  assert.equal(rates.ARS.USD, Number((1 / 1600).toFixed(5)));
+  assert.equal(rates.ARS.USD, 1 / 1600);
 });
