@@ -22,14 +22,27 @@ Los fundamentos del diseño (qué se mide y por qué) están en `DISENO_availabi
 - El timeout es de 10 s. Un request más lento se corta y cuenta como `ETIMEDOUT`.
 - La carga dura 7,5 min. En Windows se suman 1 o 2 min de `npm ci`.
 
+## Topologías
+
+El mismo escenario se ejecuta con dos configuraciones:
+
+| Medición | Comando Linux | Comando Windows |
+|---|---|---|
+| Baseline, 1 réplica | `bash correr-breakpoint-linux.sh -r 1 -n breakpoint_1replica` | `./correr-breakpoint-docker.ps1 -Replicas 1 -Nombre breakpoint_1replica` |
+| Comparación, 3 réplicas | `bash correr-breakpoint-linux.sh -r 3 -n breakpoint_3replicas` | `./correr-breakpoint-docker.ps1 -Replicas 3 -Nombre breakpoint_3replicas` |
+
+Cada réplica conserva el límite de 1 CPU y 512 MiB definido en `docker-compose.yml`. La segunda medición tiene un presupuesto total de 3 CPU, por lo que mide el efecto de escalar horizontalmente y no una comparación con igual presupuesto.
+
+El proxy usa round robin entre `exchange-api-1`, `exchange-api-2` y `exchange-api-3`. Los runners validan la cantidad solicitada, guardan logs de cada réplica y generan `requests-por-replica.txt` a partir del upstream registrado por nginx.
+
 ## Antes de correr
 
 1. **Host en las mismas condiciones en cada corrida:** notebook enchufada y en alto rendimiento, sin aplicaciones pesadas abiertas y sin otra corrida en curso. Si quedó un container colgado, borrarlo con `docker rm -f artillery`.
-2. **Una sola réplica de la api.** `docker compose -f ../docker-compose.yml ps` no tiene que mostrar `exchange-api-2`. Si aparece, correr `docker compose -f ../docker-compose.yml up -d --scale api=1`. El script también lo verifica.
+2. **Topología limpia.** El runner recibe `-r 1` o `-r 3` en Linux (`-Replicas 1` o `-Replicas 3` en Windows), escala la api y verifica que exista exactamente esa cantidad de réplicas.
 3. **Grafana** (`http://localhost`, `admin`/`admin`), la primera vez:
    - crear un datasource Graphite llamado exactamente `Graphite`, con URL `http://graphite:80`;
    - importar `perf/dashboard.json`.
-   - En cada corrida, elegir en `server` el prefijo del entorno y en `container` `exchange-api-1` y `exchange-nginx-1` (en Windows, también `artillery`).
+  - En cada corrida, elegir en `server` el prefijo del entorno y en `container` las réplicas usadas (`exchange-api-1` a `exchange-api-3`), `exchange-nginx-1` y, en Windows, `artillery`.
 
 ## Correr
 
@@ -40,7 +53,7 @@ Desde `perf/`:
 | Windows | `.\correr-breakpoint-docker.ps1 -Nombre breakpoint_windows` | `artillery-exchange-breakpoint-docker` |
 | Linux | `bash correr-breakpoint-linux.sh -n breakpoint_linux` | `artillery-exchange-breakpoint` |
 
-- El script resetea la api antes de empezar: recrea el container, así que vuelven los saldos originales y el log queda vacío.
+- El script resetea la api antes de empezar: recrea todas las réplicas solicitadas, así que vuelven los saldos originales y los logs quedan vacíos.
 - Si la corrida se repite en el mismo día, usar otro nombre, por ejemplo `breakpoint_windows_2`: el script no pisa una carpeta que ya existe.
 
 ## Durante la corrida
@@ -49,6 +62,7 @@ Desde `perf/`:
   - % de éxito por ventana, contra la línea de 99 %;
   - carga ofrecida contra throughput 2xx: donde se separan, se alcanzó la capacity;
   - CPU y memoria contra el límite (api: 1 CPU y 512 MiB; nginx: 0,5 CPU y 128 MiB).
+- **Qué mirar en los resultados:** `requests-por-replica.txt` debe mostrar requests para las tres réplicas en la corrida de 3 réplicas. Ese archivo y `nginx-access.log` son la evidencia directa del reparto; CPU y memoria solo muestran actividad relativa.
 - Anotar la hora de cualquier cosa rara: el primer error, un salto de latencia, un container que desaparece.
 - **Si la api muere:** no reiniciarla. Dejar que la corrida termine: el crash es un resultado.
 - **Si artillery deja de imprimir reportes durante más de 60 s:** el sistema se colgó.
