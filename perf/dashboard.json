@@ -1361,7 +1361,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 53
+        "y": 73
       },
       "id": 20,
       "panels": [],
@@ -1465,7 +1465,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 54
+        "y": 74
       },
       "id": 21,
       "options": {
@@ -1646,7 +1646,7 @@
         "h": 9,
         "w": 12,
         "x": 0,
-        "y": 64
+        "y": 84
       },
       "id": 22,
       "options": {
@@ -1791,7 +1791,7 @@
         "h": 9,
         "w": 12,
         "x": 12,
-        "y": 64
+        "y": 84
       },
       "id": 23,
       "options": {
@@ -1918,7 +1918,7 @@
         "h": 7,
         "w": 24,
         "x": 0,
-        "y": 73
+        "y": 93
       },
       "id": 24,
       "options": {
@@ -1950,6 +1950,156 @@
       ],
       "title": "N acumulado vs tiempo",
       "type": "timeseries"
+    },
+    {
+      "id": 30,
+      "type": "timeseries",
+      "datasource": "Graphite",
+      "title": "Prueba de carrera: saldo de la cuenta USD de arVault, segundo a segundo",
+      "description": "Lo mide reponer-saldo-carrera.py cada 1 s con GET /accounts. Al principio de cada ciclo de 10 s la cuenta se repone a 1.000 USD (puntos amarillos). Todo lo que queda debajo de la línea roja (0 USD) son cambios aprobados sin fondos.",
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 53
+      },
+      "interval": "1s",
+      "maxDataPoints": 2000,
+      "targets": [
+        {
+          "refId": "A",
+          "target": "alias(stats.gauges.$server.saldo.USD, 'Saldo USD')"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "min": -2500,
+          "max": 1250,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#73BF69"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "stepAfter",
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "spanNulls": true,
+            "axisLabel": "USD",
+            "axisSoftMin": -2500,
+            "thresholdsStyle": {
+              "mode": "line+area"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "rgba(242, 73, 92, 0.25)",
+                "value": null
+              },
+              {
+                "color": "transparent",
+                "value": 0
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "max",
+            "min",
+            "mean"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 31,
+      "type": "timeseries",
+      "datasource": "Graphite",
+      "title": "Prueba de carrera: cambios aprobados en cada ciclo de 10 s (barras) contra los 10 que se pueden pagar con 1.000 USD (línea punteada)",
+      "description": "Barras: cambios aprobados que empezaron en el ciclo (de GET /log). Línea punteada: 10, los cambios de 99,99 USD que se pueden pagar con los 1.000 USD del ciclo. Una barra roja es un ciclo en el que se aprobaron más cambios de los que había fondos.",
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 63
+      },
+      "interval": "10s",
+      "targets": [
+        {
+          "refId": "A",
+          "target": "alias(stats.gauges.$server.ciclo.aprobados, 'Aprobados en el ciclo')"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "max": 35,
+          "custom": {
+            "drawStyle": "bars",
+            "barAlignment": 1,
+            "lineWidth": 1,
+            "fillOpacity": 80,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisLabel": "cambios",
+            "gradientMode": "scheme",
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#73BF69",
+                "value": null
+              },
+              {
+                "color": "#F2495C",
+                "value": 10.001
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "sum",
+            "max",
+            "min"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      }
     }
   ],
   "preload": false,
@@ -2027,9 +2177,14 @@
             "selected": true,
             "text": "artillery-exchange-failure-recovery",
             "value": "artillery-exchange-failure-recovery"
+          },
+          {
+            "selected": false,
+            "text": "artillery-exchange-carrera-saldo",
+            "value": "artillery-exchange-carrera-saldo"
           }
         ],
-        "query": "artillery-exchange-breakpoint,artillery-exchange-stress,artillery-api,artillery-exchange-race,artillery-exchange-breakpoint-docker,artillery-exchange-stress-docker,artillery-exchange-stress-b450,artillery-exchange-stress-b450-docker,artillery-exchange-endurance-docker,artillery-exchange-endurance-320-docker,artillery-exchange-endurance,artillery-exchange-failure-recovery,",
+        "query": "artillery-exchange-breakpoint,artillery-exchange-stress,artillery-api,artillery-exchange-race,artillery-exchange-breakpoint-docker,artillery-exchange-stress-docker,artillery-exchange-stress-b450,artillery-exchange-stress-b450-docker,artillery-exchange-endurance-docker,artillery-exchange-endurance-320-docker,artillery-exchange-endurance,artillery-exchange-failure-recovery,,artillery-exchange-carrera-saldo",
         "type": "custom"
       },
       {
