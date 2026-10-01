@@ -1,0 +1,61 @@
+# Corrida de validacion: mezcla de exchanges validos con pedidos malformados
+# (moneda inexistente, a proposito). Ver GUIA_validacion.md.
+config:
+  environments:
+    api:
+      target: 'http://localhost:5555'
+      plugins:
+        statsd:
+          host: localhost
+          port: 8125
+          prefix: "artillery-exchange-validacion"
+    docker:
+      target: 'http://nginx'
+      plugins:
+        statsd:
+          host: graphite
+          port: 8125
+          prefix: "artillery-exchange-validacion-docker"
+
+  http:
+    timeout: 10
+
+  phases:
+    - name: "Carga mixta con pedidos malformados"
+      duration: 60
+      arrivalRate: 20
+
+scenarios:
+  - name: "Exchange ARS -> USD (valido)"
+    weight: 9
+    flow:
+      - post:
+          url: '/exchange'
+          json:
+            baseCurrency: "ARS"
+            counterCurrency: "USD"
+            baseAmount: 1000
+            baseAccountId: 101
+            counterAccountId: 102
+  - name: "Exchange USD -> ARS (valido)"
+    weight: 9
+    flow:
+      - post:
+          url: '/exchange'
+          json:
+            baseCurrency: "USD"
+            counterCurrency: "ARS"
+            baseAmount: 1
+            baseAccountId: 102
+            counterAccountId: 101
+  - name: "Exchange con moneda inexistente (malformado, a proposito)"
+    weight: 2
+    flow:
+      - post:
+          url: '/exchange'
+          json:
+            baseCurrency: "GBP"
+            counterCurrency: "ARS"
+            baseAmount: 100
+            baseAccountId: 101
+            counterAccountId: 102
