@@ -11,7 +11,7 @@ services:
         ports:
             - "5555:80"
         volumes:
-            - ./nginx_reverse_proxy.conf:/etc/nginx/conf.d/default.conf:ro
+            - ${NGINX_CONFIG:-./nginx_reverse_proxy.conf}:/etc/nginx/conf.d/default.conf:ro
             - ./store/static/files:/static:ro
         links:
             - api
