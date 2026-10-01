@@ -26,7 +26,7 @@ function loadExchange() {
     },
   });
 
-  exchange.init(repository);
+  exchange.init(repository, { exchangeCompleted() {}, exchangeRejected() {} });
 
   return { exchange, state };
 }

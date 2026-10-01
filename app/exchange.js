@@ -3,9 +3,11 @@ import { nanoid } from "nanoid";
 import { InsufficientFundsError } from "./errors.js";
 
 let repository;
+let metrics;
 
-export function init(stateRepository) {
+export function init(stateRepository, exchangeMetrics) {
   repository = stateRepository;
+  metrics = exchangeMetrics;
 }
 
 //returns all internal accounts
@@ -113,11 +115,18 @@ export async function exchange(exchangeRequest) {
     //not enough funds on internal counter account
     exchangeResult.obs = "Not enough funds on counter currency account";
     await repository.appendLog(exchangeResult);
+    metrics.exchangeRejected();
     throw new InsufficientFundsError(exchangeResult);
   }
 
   //log the transaction and return it
   await repository.appendLog(exchangeResult);
+
+  if (exchangeResult.ok) {
+    metrics.exchangeCompleted({ baseCurrency, counterCurrency, baseAmount, counterAmount });
+  } else {
+    metrics.exchangeRejected();
+  }
 
   return exchangeResult;
 }

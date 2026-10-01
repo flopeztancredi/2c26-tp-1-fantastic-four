@@ -16,6 +16,9 @@ import { createFileAdapter } from "./repository/file-adapter.js";
 import { createRedisAdapter } from "./repository/redis-adapter.js";
 import { InsufficientFundsError } from "./errors.js";
 import { createIdempotencyMiddleware } from "./idempotency.js";
+import { neverThrow } from "./metrics/metrics.js";
+import { createStatsdMetrics } from "./metrics/statsd-adapter.js";
+import { createNullMetrics } from "./metrics/null-adapter.js";
 import { config } from "./config.js";
 
 const repository =
@@ -23,9 +26,29 @@ const repository =
     ? await createRedisAdapter(config.redisUrl)
     : await createFileAdapter({ dir: config.stateDir });
 
-exchangeInit(repository);
+const metrics =
+  config.metricsAdapter == "statsd"
+    ? createStatsdMetrics({ host: config.statsdHost, port: config.statsdPort, prefix: config.metricsPrefix })
+    : createNullMetrics();
+const guardedMetrics = neverThrow(metrics, (err) => console.error("metrics:", err));
+
+exchangeInit(repository, guardedMetrics);
+metrics.start((await getAccounts()).map((account) => account.currency));
 
 const app = express();
+
+app.use((req, res, next) => {
+  const start = process.hrtime.bigint();
+  res.on("finish", () => {
+    guardedMetrics.requestFinished({
+      method: req.method,
+      route: req.route?.path,
+      status: res.statusCode,
+      ms: Number(process.hrtime.bigint() - start) / 1e6,
+    });
+  });
+  next();
+});
 
 app.use(express.json());
 
@@ -166,6 +189,7 @@ async function shutdown(signal) {
   ]);
 
   await repository.close();
+  metrics.close();
   process.exit(0);
 }
 

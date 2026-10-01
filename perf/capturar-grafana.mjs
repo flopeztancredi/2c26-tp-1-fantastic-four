@@ -89,14 +89,14 @@ const dashboard = JSON.parse(fs.readFileSync(dashboardPath, "utf8"));
 const uid = dashboard.uid;
 const paneles = dashboard.panels.filter((p) => p.type !== "row");
 
-function nombreArchivo(panel) {
+function nombreArchivo(panel, valor) {
   const slug = panel.title
     .toLowerCase()
     .normalize("NFD").replace(/[̀-ͯ]/g, "") // saca acentos
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 60);
-  return `panel-${panel.id}-${slug}.png`;
+  return `panel-${panel.id}-${slug}${valor ? `-${valor}` : ""}.png`;
 }
 
 async function obtenerSlug() {
@@ -151,26 +151,33 @@ async function main() {
     await page.setViewport({ width: ANCHO, height: ALTO });
 
     for (const panel of paneles) {
-      const params = new URLSearchParams({
-        orgId: "1",
-        panelId: String(panel.id),
-        from: String(from),
-        to: String(to),
-        "var-server": prefijo,
-        theme: "light",
-      });
-      // multivalor: hay que repetir la clave, una asignacion con comas no selecciona varios
-      for (const c of containers) params.append("var-container", c);
-      const url = `${grafanaUrl}/d-solo/${uid}/${slug}?${params}`;
-      const archivo = path.join(destino, nombreArchivo(panel));
-      process.stdout.write(`Panel ${panel.id} (${panel.title})... `);
-      try {
-        await page.goto(url, { waitUntil: "networkidle0", timeout: 30000 });
-        await esperarPanel(page);
-        await page.screenshot({ path: archivo });
-        console.log(`ok -> ${archivo}`);
-      } catch (err) {
-        console.log(`ERROR: ${err.message}`);
+      // un panel que se repite por una variable (los de negocio, uno por moneda) sale una vez por
+      // valor: sin fijarla, el panel suelto se dibuja con todos los valores juntos en una serie
+      const variable = panel.repeat && (dashboard.templating?.list ?? []).find((v) => v.name === panel.repeat);
+      const valores = (variable?.options ?? []).map((o) => o.value).filter((v) => v && v !== "$__all");
+      for (const valor of valores.length ? valores : [null]) {
+        const params = new URLSearchParams({
+          orgId: "1",
+          panelId: String(panel.id),
+          from: String(from),
+          to: String(to),
+          "var-server": prefijo,
+          theme: "light",
+        });
+        // multivalor: hay que repetir la clave, una asignacion con comas no selecciona varios
+        for (const c of containers) params.append("var-container", c);
+        if (valor) params.set(`var-${panel.repeat}`, valor);
+        const url = `${grafanaUrl}/d-solo/${uid}/${slug}?${params}`;
+        const archivo = path.join(destino, nombreArchivo(panel, valor));
+        process.stdout.write(`Panel ${panel.id} (${panel.title}${valor ? `, ${valor}` : ""})... `);
+        try {
+          await page.goto(url, { waitUntil: "networkidle0", timeout: 30000 });
+          await esperarPanel(page);
+          await page.screenshot({ path: archivo });
+          console.log(`ok -> ${archivo}`);
+        } catch (err) {
+          console.log(`ERROR: ${err.message}`);
+        }
       }
     }
   } finally {

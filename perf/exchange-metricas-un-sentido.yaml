@@ -1,0 +1,39 @@
+# Metricas de negocio, CA5: trafico en un solo sentido (ARS -> USD). Ver GUIA_metricas-negocio.md.
+# arVault compra ARS y vende USD: el neto de ARS tiene que dar positivo, el de USD negativo,
+# y EUR y BRL tienen que mostrar 0 (no "No data").
+config:
+  environments:
+    api:
+      target: 'http://localhost:5555'
+      plugins:
+        statsd:
+          host: localhost
+          port: 8125
+          prefix: "artillery-exchange-un-sentido"
+    docker:
+      target: 'http://nginx'
+      plugins:
+        statsd:
+          host: graphite
+          port: 8125
+          prefix: "artillery-exchange-un-sentido-docker"
+
+  http:
+    timeout: 10
+
+  phases:
+    - name: "ARS -> USD, 20 req/s"
+      duration: 120
+      arrivalRate: 20
+
+scenarios:
+  - name: "Exchange ARS -> USD"
+    flow:
+      - post:
+          url: '/exchange'
+          json:
+            baseCurrency: "ARS"
+            counterCurrency: "USD"
+            baseAmount: 1000
+            baseAccountId: 101
+            counterAccountId: 102

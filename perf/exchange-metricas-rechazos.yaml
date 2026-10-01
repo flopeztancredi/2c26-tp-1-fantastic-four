@@ -1,0 +1,51 @@
+# Metricas de negocio, CA7: mitad de los cambios rechazados por falta de fondos. Ver GUIA_metricas-negocio.md.
+# 100.000.000 ARS son 66.000 USD y la cuenta de arVault tiene 60.000: el dominio lo rechaza sin
+# transferir. No usa PUT /accounts/:id/balance, que cambiaria saldos por fuera del log.
+config:
+  environments:
+    api:
+      target: 'http://localhost:5555'
+      plugins:
+        statsd:
+          host: localhost
+          port: 8125
+          prefix: "artillery-exchange-rechazos"
+    docker:
+      target: 'http://nginx'
+      plugins:
+        statsd:
+          host: graphite
+          port: 8125
+          prefix: "artillery-exchange-rechazos-docker"
+
+  http:
+    timeout: 10
+
+  phases:
+    - name: "Mitad exitosos, mitad rechazados, 20 req/s"
+      duration: 120
+      arrivalRate: 20
+
+scenarios:
+  - name: "Exchange ARS -> USD que alcanza"
+    weight: 1
+    flow:
+      - post:
+          url: '/exchange'
+          json:
+            baseCurrency: "ARS"
+            counterCurrency: "USD"
+            baseAmount: 1000
+            baseAccountId: 101
+            counterAccountId: 102
+  - name: "Exchange ARS -> USD sin fondos en USD"
+    weight: 1
+    flow:
+      - post:
+          url: '/exchange'
+          json:
+            baseCurrency: "ARS"
+            counterCurrency: "USD"
+            baseAmount: 100000000
+            baseAccountId: 101
+            counterAccountId: 102

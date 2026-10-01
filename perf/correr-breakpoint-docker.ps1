@@ -2,7 +2,6 @@
 param(
     [string]$Escenario = "exchange-availability-breakpoint",
     [string]$Nombre = "",
-    [int]$Replicas = 1,
     [int]$MaxTimeWait = 2000,
     [int]$IntervaloSockstat = 5
 )
@@ -19,12 +18,10 @@ if (-not $Nombre) { $Nombre = "$($Corto)_docker" }
 $Red      = "exchange_default"
 $Api      = "http://localhost:5555"
 $Graphite = "http://localhost:8090"
-$env:NGINX_CONFIG = if ($Replicas -eq 1) { "./nginx_reverse_proxy-1.conf" } else { "./nginx_reverse_proxy.conf" }
 
 $Rel = "resultados/$(Get-Date -Format 'yyyy-MM-dd')_$Nombre"
 $Dir = Join-Path $PSScriptRoot $Rel
 if (-not (Test-Path "$Escenario.yaml")) { Write-Host "No existe $Escenario.yaml" -ForegroundColor Red; exit 1 }
-if ($Replicas -lt 1 -or $Replicas -gt 3) { Write-Host "Replicas debe estar entre 1 y 3" -ForegroundColor Red; exit 1 }
 if (Test-Path $Dir) {
     Write-Host "Ya existe $Rel. Usa -Nombre para elegir otra carpeta." -ForegroundColor Red
     exit 1
@@ -49,15 +46,14 @@ function DockerAArchivos($argumentos, $salida, $errores) {
 }
 
 Paso "1/7 Levantando el sistema y reseteando la api"
-docker compose -f $Compose up -d --scale api=$Replicas
+docker compose -f $Compose up -d
 Chequear "docker compose up"
-docker compose -f $Compose up -d --build --force-recreate --scale api=$Replicas api nginx
-Chequear "reset de la api"
-$actuales = @(docker ps --filter "label=com.docker.compose.service=api" --format '{{.Names}}' | Where-Object { $_ -match '^exchange-api-[0-9]+$' }).Count
-if ($actuales -ne $Replicas) {
-    Write-Host "Se esperaban $Replicas replicas y hay $actuales" -ForegroundColor Red
+if (docker ps -q -f "name=^exchange-api-2$") {
+    Write-Host "Hay mas de una replica de la api. Correr: docker compose -f ..\docker-compose.yml up -d --scale api=1" -ForegroundColor Red
     exit 1
 }
+docker compose -f $Compose up -d --build --force-recreate api
+Chequear "reset de la api"
 
 $lista = $false
 for ($i = 0; $i -lt 30; $i++) {
@@ -70,11 +66,9 @@ Guardar "cuentas-antes.json" (Invoke-WebRequest "$Api/accounts" -UseBasicParsing
 Copy-Item "$Escenario.yaml" $Dir
 
 Paso "2/7 Registrando eventos de api y nginx"
-$eventFilters = @('--filter', 'container=exchange-nginx-1')
-1..$Replicas | ForEach-Object { $eventFilters += @('--filter', "container=exchange-api-$_") }
 $eventos = Start-Process docker -NoNewWindow -PassThru `
-    -ArgumentList (@('events') + $eventFilters + @(
-                    '--format', '"{{.Time}} {{.Actor.Attributes.name}} {{.Action}}"')) `
+    -ArgumentList @('events', '--filter', 'container=exchange-api-1', '--filter', 'container=exchange-nginx-1',
+                    '--format', '"{{.Time}} {{.Actor.Attributes.name}} {{.Action}}"') `
     -RedirectStandardOutput (Join-Path $Dir "eventos-containers.txt") `
     -RedirectStandardError  (Join-Path $Dir "eventos-containers.err.txt")
 
@@ -126,24 +120,12 @@ Remove-Job $registroSockstat -Force
 Paso "4/7 Guardando saldos y estado de la api"
 try { Guardar "cuentas-despues.json" (Invoke-WebRequest "$Api/accounts" -UseBasicParsing -TimeoutSec 10).Content }
 catch { Guardar "cuentas-despues.json" "ERROR: la api no respondio a /accounts: $_" }
+$estado = docker inspect -f '{{.State.Status}} OOMKilled={{.State.OOMKilled}} ExitCode={{.State.ExitCode}} Restarts={{.RestartCount}}' exchange-api-1
+Guardar "estado-api-despues.txt" ($estado -join "`n")
+
 Paso "5/7 Guardando logs de nginx y api"
 DockerAArchivos @('logs', '--since', "$Inicio", 'exchange-nginx-1') "nginx-access.log" "nginx-error.log"
-$requests = @()
-1..$Replicas | ForEach-Object {
-    $replica = $_
-    $ip = docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "exchange-api-$replica"
-    $cantidad = @(Get-Content (Join-Path $Dir "nginx-access.log") | Where-Object { $_ -match "upstream=$ip`:" }).Count
-    $requests += "$cantidad exchange-api-$replica ($ip)"
-}
-Guardar "requests-por-replica.txt" (($requests -join "`n") + "`n")
-$estados = @()
-1..$Replicas | ForEach-Object {
-    $replica = $_
-    $estado = docker inspect -f '{{.State.Status}} OOMKilled={{.State.OOMKilled}} ExitCode={{.State.ExitCode}} Restarts={{.RestartCount}}' "exchange-api-$replica"
-    $estados += "exchange-api-$replica`: $($estado -join ' ')"
-    DockerAArchivos @('logs', '--since', "$Inicio", "exchange-api-$replica") "api-$replica-stdout.log" "api-$replica-stderr.log"
-}
-Guardar "estado-api-despues.txt" ($estados -join "`n")
+DockerAArchivos @('logs', '--since', "$Inicio", 'exchange-api-1')   "api-stdout.log"   "api-stderr.log"
 
 Paso "6/7 Exportando metricas de graphite"
 Start-Sleep 15
@@ -155,13 +137,12 @@ function ExportarGraphite($archivo, $targets) {
     catch { Guardar $archivo "ERROR exportando de graphite: $_" }
 }
 ExportarGraphite "datos-recursos.json" @(
-    "stats.gauges.cadvisor.{$apiContainers,exchange-nginx-1,artillery}.cpu_cumulative_usage",
-    "stats.gauges.cadvisor.{$apiContainers,exchange-nginx-1,artillery}.memory_working_set"
+    "stats.gauges.cadvisor.{exchange-api-1,exchange-nginx-1,artillery}.cpu_cumulative_usage",
+    "stats.gauges.cadvisor.{exchange-api-1,exchange-nginx-1,artillery}.memory_working_set"
 )
 ExportarGraphite "datos-artillery-graphite.json" @("stats.gauges.$Prefijo.*", "stats.gauges.$Prefijo.*.*")
 
 Paso "7/7 Registrando el entorno"
-$apiContainers = (1..$Replicas | ForEach-Object { "exchange-api-$_" }) -join ','
 & {
     Get-CimInstance Win32_Processor | Format-List Name, NumberOfCores, NumberOfLogicalProcessors
     Get-CimInstance Win32_ComputerSystem | Format-List TotalPhysicalMemory
@@ -169,9 +150,7 @@ $apiContainers = (1..$Replicas | ForEach-Object { "exchange-api-$_" }) -join ','
     docker compose version
     docker info --format "VM: {{.NCPU}} CPU, {{.MemTotal}} bytes, kernel {{.KernelVersion}}"
     docker run --rm alpine free -m
-    1..$Replicas | ForEach-Object {
-        docker inspect -f "{{.Name}} Memory={{.HostConfig.Memory}} MemorySwap={{.HostConfig.MemorySwap}}" "exchange-api-$_"
-    }
+    docker inspect -f "Memory={{.HostConfig.Memory}} MemorySwap={{.HostConfig.MemorySwap}}" exchange-api-1
 } | Out-String | ForEach-Object { Guardar "entorno.txt" $_ }
 
 Paso "Listo"
@@ -179,6 +158,6 @@ if ($salidaArtillery -ne 0) { Write-Host "Ojo: artillery termino con exit $salid
 $ev = Get-Content (Join-Path $Dir "eventos-containers.txt") -ErrorAction SilentlyContinue
 Write-Host "Resultados en: perf/$Rel"
 Write-Host "Eventos de containers: $(if ($ev) { $ev -join ' | ' } else { 'ninguno' })"
-Write-Host "Requests por replica: $($requests -join ' | ')"
-Write-Host "Grafana: prefijo $Prefijo, containers exchange-api-1..$Replicas / exchange-nginx-1 / artillery,"
+Write-Host "Estado de la api: $estado"
+Write-Host "Grafana: prefijo $Prefijo, containers exchange-api-1 / exchange-nginx-1 / artillery,"
 Write-Host "         desde $([DateTimeOffset]::FromUnixTimeSeconds($Inicio).ToLocalTime().ToString('HH:mm')) hasta $([DateTimeOffset]::FromUnixTimeSeconds($Fin).ToLocalTime().ToString('HH:mm'))"

@@ -1,3 +1,4 @@
-# installed by npm install / dev only
 node_modules
 test
+state/log.jsonl
+state/audit.jsonl
