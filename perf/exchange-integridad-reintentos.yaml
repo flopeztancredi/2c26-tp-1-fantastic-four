@@ -1,0 +1,76 @@
+# Integridad: cada usuario virtual manda el mismo cambio dos veces con la misma Idempotency-Key. Ver GUIA_idempotencia.md.
+config:
+  environments:
+    api:
+      target: 'http://localhost:5555'
+      plugins:
+        statsd:
+          host: localhost
+          port: 8125
+          prefix: "artillery-exchange-reintentos"
+    docker:
+      target: 'http://nginx'
+      plugins:
+        statsd:
+          host: graphite
+          port: 8125
+          prefix: "artillery-exchange-reintentos-docker"
+
+  http:
+    timeout: 10
+
+  phases:
+    - name: "Calentamiento"
+      duration: 15
+      arrivalRate: 5
+    - name: "Reintentos con misma clave, 20 usuarios virtuales/s"
+      duration: 60
+      arrivalRate: 20
+
+scenarios:
+  - name: "Exchange ARS -> USD, reintentado"
+    weight: 1
+    flow:
+      - post:
+          url: '/exchange'
+          headers:
+            Idempotency-Key: "{{ $uuid }}"
+          json:
+            baseCurrency: "ARS"
+            counterCurrency: "USD"
+            baseAmount: 1000
+            baseAccountId: 101
+            counterAccountId: 102
+      - post:
+          url: '/exchange'
+          headers:
+            Idempotency-Key: "{{ $uuid }}"
+          json:
+            baseCurrency: "ARS"
+            counterCurrency: "USD"
+            baseAmount: 1000
+            baseAccountId: 101
+            counterAccountId: 102
+  - name: "Exchange USD -> ARS, reintentado"
+    weight: 1
+    flow:
+      - post:
+          url: '/exchange'
+          headers:
+            Idempotency-Key: "{{ $uuid }}"
+          json:
+            baseCurrency: "USD"
+            counterCurrency: "ARS"
+            baseAmount: 1
+            baseAccountId: 102
+            counterAccountId: 101
+      - post:
+          url: '/exchange'
+          headers:
+            Idempotency-Key: "{{ $uuid }}"
+          json:
+            baseCurrency: "USD"
+            counterCurrency: "ARS"
+            baseAmount: 1
+            baseAccountId: 102
+            counterAccountId: 101
