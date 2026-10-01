@@ -9,6 +9,7 @@ import {
   getLog,
   exchange,
 } from "./exchange.js";
+import { createIdempotencyMiddleware } from "./idempotency.js";
 
 await exchangeInit();
 
@@ -63,7 +64,7 @@ app.get("/log", (req, res) => {
 
 // EXCHANGE endpoint
 
-app.post("/exchange", async (req, res) => {
+app.post("/exchange", createIdempotencyMiddleware(), async (req, res) => {
   const {
     baseCurrency,
     counterCurrency,
