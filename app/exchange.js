@@ -97,24 +97,28 @@ export async function exchange(exchangeRequest) {
 
   //check if we have funds on the counter currency account
   if (counterAccount.balance >= counterAmount) {
+    //reserve the funds before any await: check and debit run as a single step,
+    //so concurrent requests cannot spend the same balance
+    counterAccount.balance -= counterAmount;
     //try to transfer from clients' base account
     if (await transfer(clientBaseAccountId, baseAccount.id, baseAmount)) {
       //try to transfer to clients' counter account
       if (
         await transfer(counterAccount.id, clientCounterAccountId, counterAmount)
       ) {
-        //all good, update balances
+        //all good, update balances (counter funds were already reserved)
         baseAccount.balance += baseAmount;
-        counterAccount.balance -= counterAmount;
         exchangeResult.ok = true;
         exchangeResult.counterAmount = counterAmount;
       } else {
-        //could not transfer to clients' counter account, return base amount to client
+        //could not transfer to clients' counter account, release the reservation and return base amount to client
+        counterAccount.balance += counterAmount;
         await transfer(baseAccount.id, clientBaseAccountId, baseAmount);
         exchangeResult.obs = "Could not transfer to clients' account";
       }
     } else {
-      //could not withdraw from clients' account
+      //could not withdraw from clients' account, release the reservation
+      counterAccount.balance += counterAmount;
       exchangeResult.obs = "Could not withdraw from clients' account";
     }
   } else {
