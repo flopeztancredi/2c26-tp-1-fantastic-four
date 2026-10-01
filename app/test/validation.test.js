@@ -1,27 +1,19 @@
-import { test, mock, before, after } from "node:test";
+import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-
-const accounts = [
-  { id: 1, currency: "ARS", balance: 1000000 },
-  { id: 2, currency: "USD", balance: 10 },
-];
-const rates = { ARS: { USD: 0.001 }, USD: { ARS: 1000 } };
-
-//state in memory, so the tests never touch app/state
-mock.module("../state.js", {
-  namedExports: {
-    init: async () => {},
-    getAccounts: () => accounts,
-    getRates: () => rates,
-    getLog: () => [],
-  },
-});
+import { mkdtemp, cp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 
 let server;
 let baseUrl;
+let stateDir;
 
 before(async () => {
+  stateDir = await mkdtemp(path.join(tmpdir(), "arvault-validation-"));
+  await cp(path.join(import.meta.dirname, "../state"), stateDir, { recursive: true });
+  process.env.STATE_DIR = stateDir;
   process.env.PORT = "0";
+
   ({ server } = await import("../app.js"));
   if (!server.listening) {
     await new Promise((resolve) => server.once("listening", resolve));
@@ -29,9 +21,10 @@ before(async () => {
   baseUrl = `http://localhost:${server.address().port}`;
 });
 
-after(() => {
+after(async () => {
   server.closeAllConnections();
   server.close();
+  await rm(stateDir, { recursive: true, force: true });
 });
 
 function send(method, path, body) {
@@ -62,12 +55,12 @@ test("a negative or non numeric amount is 400", async () => {
 });
 
 test("not enough funds is 422", async () => {
-  assert.equal((await send("POST", "/exchange", exchangeRequest({ baseAmount: 100000 }))).status, 422);
+  assert.equal((await send("POST", "/exchange", exchangeRequest({ baseAmount: 1e12 }))).status, 422);
 });
 
 test("a rate for an unknown currency is 400", async () => {
   assert.equal((await send("PUT", "/rates", { baseCurrency: "XYZ", counterCurrency: "ARS", rate: 2 })).status, 400);
-  assert.equal(rates.XYZ, undefined);
+  assert.equal((await (await send("GET", "/rates")).json()).XYZ, undefined);
 });
 
 test("an unknown account is 404", async () => {

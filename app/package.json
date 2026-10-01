@@ -5,12 +5,13 @@
   "main": "app.js",
   "type": "module",
   "scripts": {
-    "test": "node --test --experimental-test-module-mocks"
+    "test": "node --test"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
     "express": "^4.21.2",
-    "nanoid": "^5.1.2"
+    "nanoid": "^5.1.2",
+    "redis": "6.2.1"
   }
 }

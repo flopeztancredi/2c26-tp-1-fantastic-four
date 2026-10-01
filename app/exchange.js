@@ -1,68 +1,57 @@
 import { nanoid } from "nanoid";
 
-import { init as stateInit, getAccounts as stateAccounts, getRates as stateRates, getLog as stateLog, appendLog as stateAppendLog } from "./state.js";
 import { InsufficientFundsError } from "./errors.js";
 
-let accounts;
-let rates;
+let repository;
 
-//call to initialize the exchange service
-export async function init() {
-  await stateInit();
-
-  accounts = stateAccounts();
-  rates = stateRates();
+export function init(stateRepository) {
+  repository = stateRepository;
 }
 
 //returns all internal accounts
-export function getAccounts() {
-  return accounts;
-}
-
-//sets balance for an account
-export function setAccountBalance(accountId, balance) {
-  const account = findAccountById(accountId);
-
-  if (account != null) {
-    account.balance = balance;
-  }
-}
-
-//returns all current exchange rates
-export function getRates() {
-  return rates;
-}
-
-//returns the whole transaction log
-export function getLog() {
-  return stateLog();
+export async function getAccounts() {
+  return repository.getAccounts();
 }
 
 //true if there is an internal account for the currency
-export function isKnownCurrency(currency) {
-  return findAccountByCurrency(currency) != null;
+export async function isKnownCurrency(currency) {
+  return (await repository.findAccountByCurrency(currency)) != null;
 }
 
 //true if there is an internal account with that id
-export function isKnownAccount(accountId) {
-  return findAccountById(accountId) != null;
+export async function isKnownAccount(accountId) {
+  const accounts = await repository.getAccounts();
+  return accounts.some((account) => account.id == accountId);
 }
 
 //true if the pair has a numeric rate and both currencies have an internal account
-export function isSupportedPair(baseCurrency, counterCurrency) {
+export async function isSupportedPair(baseCurrency, counterCurrency) {
+  const rates = await repository.getRates();
   return (
-    isKnownCurrency(baseCurrency) &&
-    isKnownCurrency(counterCurrency) &&
+    (await isKnownCurrency(baseCurrency)) &&
+    (await isKnownCurrency(counterCurrency)) &&
     Number.isFinite(rates[baseCurrency]?.[counterCurrency])
   );
 }
 
-//sets the exchange rate for a given pair of currencies, and the reciprocal rate as well
-export function setRate(rateRequest) {
-  const { baseCurrency, counterCurrency, rate } = rateRequest;
+//sets balance for an account
+export async function setAccountBalance(accountId, balance) {
+  await repository.setAccountBalance(accountId, balance);
+}
 
-  rates[baseCurrency][counterCurrency] = rate;
-  rates[counterCurrency][baseCurrency] = Number((1 / rate).toFixed(5));
+//returns all current exchange rates
+export async function getRates() {
+  return repository.getRates();
+}
+
+//returns the whole transaction log
+export async function getLog() {
+  return repository.getLog();
+}
+
+//sets the exchange rate for a given pair of currencies, and the reciprocal rate as well
+export async function setRate(rateRequest) {
+  await repository.setRate(rateRequest);
 }
 
 //executes an exchange operation
@@ -75,14 +64,15 @@ export async function exchange(exchangeRequest) {
     baseAmount,
   } = exchangeRequest;
 
-  //get the exchange rate
+  //get the exchange rate and our accounts on both currencies
+  const [rates, baseAccount, counterAccount] = await Promise.all([
+    repository.getRates(),
+    repository.findAccountByCurrency(baseCurrency),
+    repository.findAccountByCurrency(counterCurrency),
+  ]);
   const exchangeRate = rates[baseCurrency][counterCurrency];
   //compute the requested (counter) amount
   const counterAmount = baseAmount * exchangeRate;
-  //find our account on the provided (base) currency
-  const baseAccount = findAccountByCurrency(baseCurrency);
-  //find our account on the counter currency
-  const counterAccount = findAccountByCurrency(counterCurrency);
 
   //construct the result object with defaults
   const exchangeResult = {
@@ -95,41 +85,39 @@ export async function exchange(exchangeRequest) {
     obs: null,
   };
 
-  //check if we have funds on the counter currency account
-  if (counterAccount.balance >= counterAmount) {
-    //reserve the funds before any await: check and debit run as a single step,
-    //so concurrent requests cannot spend the same balance
-    counterAccount.balance -= counterAmount;
+  //check and discount funds on the counter currency account
+  if (await repository.reserveBalance(counterAccount.id, counterAmount)) {
     //try to transfer from clients' base account
     if (await transfer(clientBaseAccountId, baseAccount.id, baseAmount)) {
       //try to transfer to clients' counter account
       if (
         await transfer(counterAccount.id, clientCounterAccountId, counterAmount)
       ) {
-        //all good, update balances (counter funds were already reserved)
-        baseAccount.balance += baseAmount;
+        //all good, credit our base account
+        await repository.creditBalance(baseAccount.id, baseAmount);
         exchangeResult.ok = true;
         exchangeResult.counterAmount = counterAmount;
       } else {
-        //could not transfer to clients' counter account, release the reservation and return base amount to client
-        counterAccount.balance += counterAmount;
+        //could not transfer to clients' counter account, return base amount to client
         await transfer(baseAccount.id, clientBaseAccountId, baseAmount);
+        //and give back what we reserved
+        await repository.creditBalance(counterAccount.id, counterAmount);
         exchangeResult.obs = "Could not transfer to clients' account";
       }
     } else {
-      //could not withdraw from clients' account, release the reservation
-      counterAccount.balance += counterAmount;
+      //could not withdraw from clients' account, give back what we reserved
+      await repository.creditBalance(counterAccount.id, counterAmount);
       exchangeResult.obs = "Could not withdraw from clients' account";
     }
   } else {
     //not enough funds on internal counter account
     exchangeResult.obs = "Not enough funds on counter currency account";
-    stateAppendLog(exchangeResult);
+    await repository.appendLog(exchangeResult);
     throw new InsufficientFundsError(exchangeResult);
   }
 
   //log the transaction and return it
-  stateAppendLog(exchangeResult);
+  await repository.appendLog(exchangeResult);
 
   return exchangeResult;
 }
@@ -141,24 +129,4 @@ async function transfer(fromAccountId, toAccountId, amount) {
   return new Promise((resolve) =>
     setTimeout(() => resolve(true), Math.random() * (max - min + 1) + min)
   );
-}
-
-function findAccountByCurrency(currency) {
-  for (let account of accounts) {
-    if (account.currency == currency) {
-      return account;
-    }
-  }
-
-  return null;
-}
-
-function findAccountById(id) {
-  for (let account of accounts) {
-    if (account.id == id) {
-      return account;
-    }
-  }
-
-  return null;
 }

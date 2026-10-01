@@ -12,22 +12,30 @@ import {
   isKnownAccount,
   isSupportedPair,
 } from "./exchange.js";
-import { saveAll } from "./state.js";
+import { createFileAdapter } from "./repository/file-adapter.js";
+import { createRedisAdapter } from "./repository/redis-adapter.js";
 import { InsufficientFundsError } from "./errors.js";
+import { config } from "./config.js";
 
-await exchangeInit();
+const repository =
+  config.stateAdapter == "redis"
+    ? await createRedisAdapter(config.redisUrl)
+    : await createFileAdapter({ dir: config.stateDir });
+
+exchangeInit(repository);
 
 const app = express();
-const port = process.env.PORT || 3000;
 
 app.use(express.json());
 
-// HEALTH endpoint (ping/echo): answers only while the process is serving requests and the state is loaded
+const asyncHandler = (fn) => (req, res, next) => fn(req, res).catch(next);
 
-app.get("/health", (req, res) => {
-  const ok = getAccounts() != null && getRates() != null;
-  res.status(ok ? 200 : 503).json({ status: ok ? "ok" : "state not loaded", uptime: process.uptime() });
-});
+// HEALTH endpoint (ping/echo): answers only while the process is serving requests and the state store answers
+
+app.get("/health", asyncHandler(async (req, res) => {
+  const ok = await repository.ping().catch(() => false);
+  res.status(ok ? 200 : 503).json({ status: ok ? "ok" : "state store not available", uptime: process.uptime() });
+}));
 
 // VALIDATION (parameter typing / fence): se rechaza el pedido antes de ejecutar nada,
 // indicando el primer campo inválido
@@ -36,12 +44,12 @@ const isPositiveNumber = (v) => typeof v === "number" && Number.isFinite(v) && v
 const isCurrencyCode = (v) => typeof v === "string" && /^[A-Z]{3}$/.test(v);
 const isAccountId = (v) => (typeof v === "string" && v.length > 0) || Number.isInteger(v);
 
-function validateExchange(body) {
+async function validateExchange(body) {
   const { baseCurrency, counterCurrency, baseAccountId, counterAccountId, baseAmount } = body;
   if (!isCurrencyCode(baseCurrency)) return "baseCurrency must be a 3-letter currency code";
   if (!isCurrencyCode(counterCurrency)) return "counterCurrency must be a 3-letter currency code";
   if (baseCurrency === counterCurrency) return "baseCurrency and counterCurrency must be different";
-  if (!isSupportedPair(baseCurrency, counterCurrency))
+  if (!(await isSupportedPair(baseCurrency, counterCurrency)))
     return `exchange ${baseCurrency}->${counterCurrency} is not supported`;
   if (!isPositiveNumber(baseAmount)) return "baseAmount must be a positive number";
   if (!isAccountId(baseAccountId)) return "baseAccountId is required";
@@ -49,10 +57,10 @@ function validateExchange(body) {
   return null;
 }
 
-function validateRate(body) {
+async function validateRate(body) {
   const { baseCurrency, counterCurrency, rate } = body;
-  if (!isKnownCurrency(baseCurrency)) return "baseCurrency must be a currency with an internal account";
-  if (!isKnownCurrency(counterCurrency)) return "counterCurrency must be a currency with an internal account";
+  if (!(await isKnownCurrency(baseCurrency))) return "baseCurrency must be a currency with an internal account";
+  if (!(await isKnownCurrency(counterCurrency))) return "counterCurrency must be a currency with an internal account";
   if (baseCurrency === counterCurrency) return "baseCurrency and counterCurrency must be different";
   if (!isPositiveNumber(rate)) return "rate must be a positive number";
   return null;
@@ -60,73 +68,67 @@ function validateRate(body) {
 
 // ACCOUNT endpoints
 
-app.get("/accounts", (req, res) => {
-  res.json(getAccounts());
-});
+app.get("/accounts", asyncHandler(async (req, res) => {
+  res.json(await getAccounts());
+}));
 
-app.put("/accounts/:id/balance", (req, res) => {
+app.put("/accounts/:id/balance", asyncHandler(async (req, res) => {
   const accountId = req.params.id;
   const { balance } = req.body;
 
-  if (!isKnownAccount(accountId)) {
+  if (!(await isKnownAccount(accountId))) {
     return res.status(404).json({ error: `account ${accountId} not found` });
   }
   if (typeof balance !== "number" || !Number.isFinite(balance) || balance < 0) {
     return res.status(400).json({ error: "balance must be a non-negative number" });
-  } else {
-    setAccountBalance(accountId, balance);
-
-    res.json(getAccounts());
   }
-});
+
+  await setAccountBalance(accountId, balance);
+
+  res.json(await getAccounts());
+}));
 
 // RATE endpoints
 
-app.get("/rates", (req, res) => {
-  res.json(getRates());
-});
+app.get("/rates", asyncHandler(async (req, res) => {
+  res.json(await getRates());
+}));
 
-app.put("/rates", (req, res) => {
-  const error = validateRate(req.body);
+app.put("/rates", asyncHandler(async (req, res) => {
+  const error = await validateRate(req.body);
   if (error) {
     return res.status(400).json({ error });
   }
 
   const newRateRequest = { ...req.body };
-  setRate(newRateRequest);
+  await setRate(newRateRequest);
 
-  res.json(getRates());
-});
+  res.json(await getRates());
+}));
 
 // LOG endpoint
 
-app.get("/log", async (req, res) => {
+app.get("/log", asyncHandler(async (req, res) => {
   res.json(await getLog());
-});
+}));
 
 // EXCHANGE endpoint
 
-app.post("/exchange", async (req, res, next) => {
-  const error = validateExchange(req.body);
+app.post("/exchange", asyncHandler(async (req, res) => {
+  const error = await validateExchange(req.body);
   if (error) {
     return res.status(400).json({ error });
   }
 
-  // EXCEPTION HANDLING: una excepción en este pedido responde error a este pedido
-  // y no termina el proceso (antes, la promesa rechazada sin manejar lo mataba)
-  try {
-    const exchangeRequest = { ...req.body };
-    const exchangeResult = await exchange(exchangeRequest);
+  const exchangeRequest = { ...req.body };
+  const exchangeResult = await exchange(exchangeRequest);
 
-    if (exchangeResult.ok) {
-      res.status(200).json(exchangeResult);
-    } else {
-      res.status(500).json(exchangeResult);
-    }
-  } catch (err) {
-    next(err);
+  if (exchangeResult.ok) {
+    res.status(200).json(exchangeResult);
+  } else {
+    res.status(500).json(exchangeResult);
   }
-});
+}));
 
 // errores de cualquier handler: JSON sin stack trace (el detalle queda en el log del servidor)
 app.use((err, req, res, next) => {
@@ -145,7 +147,7 @@ process.on("unhandledRejection", (err) => {
   console.error(`[${new Date().toISOString()}] unhandled rejection:`, err);
 });
 
-const server = app.listen(port, () => {
+const server = app.listen(config.port, () => {
   console.log(`Exchange API listening on port ${server.address().port}`);
 });
 
@@ -162,7 +164,7 @@ async function shutdown(signal) {
     new Promise((resolve) => setTimeout(resolve, 8000)),
   ]);
 
-  await saveAll();
+  await repository.close();
   process.exit(0);
 }
 
