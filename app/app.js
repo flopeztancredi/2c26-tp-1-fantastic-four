@@ -16,7 +16,7 @@ import {
 import { createFileAdapter } from "./repository/file-adapter.js";
 import { createRedisAdapter } from "./repository/redis-adapter.js";
 import { InsufficientFundsError } from "./errors.js";
-import { createIdempotencyMiddleware } from "./idempotency.js";
+import { createIdempotencyMiddleware, createMemoryStore, createRedisStore } from "./idempotency.js";
 import { neverThrow } from "./metrics/metrics.js";
 import { createStatsdMetrics } from "./metrics/statsd-adapter.js";
 import { createNullMetrics } from "./metrics/null-adapter.js";
@@ -34,6 +34,9 @@ const metrics =
 const guardedMetrics = neverThrow(metrics, (err) => console.error("metrics:", err));
 
 exchangeInit(repository, guardedMetrics);
+
+const idempotencyStore = config.stateAdapter == "redis" ? await createRedisStore(config.redisUrl) : createMemoryStore();
+const idempotency = createIdempotencyMiddleware({ store: idempotencyStore, ttlMs: config.idempotencyTtlMs });
 metrics.start((await getAccounts()).map((account) => account.currency));
 
 const app = express();
@@ -53,7 +56,7 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
-const asyncHandler = (fn) => (req, res, next) => fn(req, res).catch(next);
+const asyncHandler = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 
 // HEALTH endpoint (ping/echo): answers only while the process is serving requests and the state store answers
 
@@ -146,7 +149,7 @@ app.get("/audit", asyncHandler(async (req, res) => {
 
 // EXCHANGE endpoint
 
-app.post("/exchange", createIdempotencyMiddleware(), asyncHandler(async (req, res) => {
+app.post("/exchange", asyncHandler(idempotency), asyncHandler(async (req, res) => {
   const error = await validateExchange(req.body);
   if (error) {
     return res.status(400).json({ error });
@@ -197,6 +200,7 @@ async function shutdown(signal) {
   ]);
 
   await repository.close();
+  await idempotencyStore.close();
   metrics.close();
   process.exit(0);
 }

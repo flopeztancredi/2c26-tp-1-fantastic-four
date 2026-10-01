@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
 
-import { createIdempotencyMiddleware } from "../idempotency.js";
+import { createIdempotencyMiddleware, createMemoryStore } from "../idempotency.js";
 
 //counts how many times the handler ran
 function startApp(t, options, gate) {
@@ -10,7 +10,7 @@ function startApp(t, options, gate) {
   let calls = 0;
 
   app.use(express.json());
-  app.post("/exchange", createIdempotencyMiddleware(options), async (req, res) => {
+  app.post("/exchange", createIdempotencyMiddleware({ store: createMemoryStore(options), ...options }), async (req, res) => {
     calls++;
     await gate;
     res.json({ calls });
@@ -100,4 +100,17 @@ test("a key longer than 255 characters is 400", async (t) => {
 
   assert.equal((await app.post("a".repeat(256))).status, 400);
   assert.equal(app.calls(), 0);
+});
+
+test("with redis a key reserved by one replica is seen by another", { skip: !process.env.REDIS_URL && "REDIS_URL is not set" }, async () => {
+  const { createRedisStore } = await import("../idempotency.js");
+  const replica1 = await createRedisStore(process.env.REDIS_URL);
+  const replica2 = await createRedisStore(process.env.REDIS_URL);
+  const key = `test-${process.pid}`;
+
+  assert.equal(await replica1.reserve(key, { body: "{}" }, 1000), null);
+  assert.deepEqual(await replica2.reserve(key, { body: "{}" }, 1000), { body: "{}" });
+
+  await replica1.close();
+  await replica2.close();
 });
