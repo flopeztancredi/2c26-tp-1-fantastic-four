@@ -95,7 +95,7 @@ test("appendLog and getLog keep the order", { skip }, async (t) => {
   await adapter.appendLog(entryA);
   await adapter.appendLog(entryB);
 
-  assert.deepEqual(await adapter.getLog(), [entryA, entryB]);
+  assert.deepEqual((await adapter.getLog()).map((entry) => entry.id), ["a", "b"]);
 });
 
 test("setRate also sets the reciprocal rate", { skip }, async (t) => {

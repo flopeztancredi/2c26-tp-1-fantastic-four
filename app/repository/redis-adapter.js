@@ -1,10 +1,19 @@
-// redis adapter: balances and currencies in two hashes, rates in a hash, log in a stream
+// redis adapter: balances and currencies in two hashes, rates in a hash, log and audit in streams
 
 import { createClient } from "redis";
 import path from "path";
 import fs from "fs";
 
 import { assertReciprocal } from "../rates.js";
+
+const APPEND_SCRIPT = `
+local prev = redis.call("GET", KEYS[2]) or ""
+local hash = redis.sha1hex(prev .. ARGV[1])
+redis.call("XADD", KEYS[1], "*", "data", ARGV[1], "prev", prev, "hash", hash)
+redis.call("SET", KEYS[2], hash)
+`;
+
+const append = (stream, entry) => ({ keys: [stream, `${stream}:last`], arguments: [JSON.stringify(entry)] });
 
 const RESERVE_SCRIPT = `
 local balance = tonumber(redis.call("HGET", KEYS[1], ARGV[1]))
@@ -49,7 +58,7 @@ export async function createRedisAdapter(url) {
       await client
         .multi()
         .hSet("balances", String(accountId), String(balance))
-        .xAdd("audit", "*", { data: JSON.stringify(audit) })
+        .eval(APPEND_SCRIPT, append("audit", audit))
         .exec();
     },
 
@@ -73,22 +82,20 @@ export async function createRedisAdapter(url) {
           [`${baseCurrency}:${counterCurrency}`]: String(rate),
           [`${counterCurrency}:${baseCurrency}`]: String(1 / rate),
         })
-        .xAdd("audit", "*", { data: JSON.stringify(audit) })
+        .eval(APPEND_SCRIPT, append("audit", audit))
         .exec();
     },
 
     async getLog() {
-      const entries = await client.xRange("log", "-", "+");
-      return entries.map((entry) => JSON.parse(entry.message.data));
+      return readStream(client, "log");
     },
 
     async getAudit() {
-      const entries = await client.xRange("audit", "-", "+");
-      return entries.map((entry) => JSON.parse(entry.message.data));
+      return readStream(client, "audit");
     },
 
     async appendLog(entry) {
-      await client.xAdd("log", "*", { data: JSON.stringify(entry) });
+      await client.eval(APPEND_SCRIPT, append("log", entry));
     },
 
     async reserveBalance(accountId, amount) {
@@ -112,6 +119,11 @@ export async function createRedisAdapter(url) {
       await client.quit();
     },
   };
+}
+
+async function readStream(client, stream) {
+  const entries = await client.xRange(stream, "-", "+");
+  return entries.map(({ message }) => ({ ...JSON.parse(message.data), prev: message.prev, hash: message.hash }));
 }
 
 //loads accounts and rates from app/state into redis the first time, SET NX so only one replica does it

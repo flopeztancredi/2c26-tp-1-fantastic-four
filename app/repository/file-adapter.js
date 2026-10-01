@@ -4,6 +4,7 @@ import path from "path";
 import fs from "fs";
 
 import { assertReciprocal } from "../rates.js";
+import { linkHash } from "../chain.js";
 
 //tests pass persist false so they do not write the state files
 export async function createFileAdapter({ dir, persist = true }) {
@@ -16,6 +17,20 @@ export async function createFileAdapter({ dir, persist = true }) {
   const rates = await load(ratesFile);
   assertReciprocal(rates, ratesFile);
   await migrateLegacyLog(path.join(dir, "log.json"), logFile);
+
+  const lastHash = {
+    [logFile]: (await loadLog(logFile)).at(-1)?.hash ?? "",
+    [auditFile]: (await loadLog(auditFile)).at(-1)?.hash ?? "",
+  };
+
+  //sync, so the lines stay in the order of their hashes
+  function appendChained(filePath, entry) {
+    const prev = lastHash[filePath];
+    const hash = linkHash(prev, entry);
+
+    fs.appendFileSync(filePath, JSON.stringify({ ...entry, prev, hash }) + "\n");
+    lastHash[filePath] = hash;
+  }
 
   const timers = [];
   const pendingSaves = new Set();
@@ -48,7 +63,7 @@ export async function createFileAdapter({ dir, persist = true }) {
 
     //the audit entry is written first: without it there is no change
     async setAccountBalance(accountId, balance, audit) {
-      await appendLine(auditFile, audit);
+      appendChained(auditFile, audit);
       findAccountById(accounts, accountId).balance = balance;
     },
 
@@ -57,7 +72,7 @@ export async function createFileAdapter({ dir, persist = true }) {
     },
 
     async setRate({ baseCurrency, counterCurrency, rate }, audit) {
-      await appendLine(auditFile, audit);
+      appendChained(auditFile, audit);
       rates[baseCurrency][counterCurrency] = rate;
       rates[counterCurrency][baseCurrency] = 1 / rate;
     },
@@ -67,7 +82,7 @@ export async function createFileAdapter({ dir, persist = true }) {
     },
 
     async appendLog(entry) {
-      await appendLine(logFile, entry);
+      appendChained(logFile, entry);
     },
 
     async getAudit() {
@@ -125,10 +140,6 @@ async function load(filePath) {
   } catch (err) {
     throw new Error(`cannot load ${filePath}: ${err.message}`);
   }
-}
-
-async function appendLine(filePath, entry) {
-  await fs.promises.appendFile(filePath, JSON.stringify(entry) + "\n");
 }
 
 //a line cut by a crash is skipped with a warning instead of losing the whole log
