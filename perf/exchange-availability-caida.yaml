@@ -1,0 +1,54 @@
+# Availability ante una caída del proceso de la api: carga constante de 0.5B (160 req/s) durante 3 min.
+# A los 60 s y a los 120 s, caida-del-proceso.js manda un único pedido con una moneda que no existe, que en el
+# código base termina el proceso de la api (A.3). Pregunta: después de una caída, ¿el servicio vuelve solo? Ver README.md.
+config:
+  processor: "./caida-del-proceso.js"
+  environments:
+    api:
+      target: 'http://localhost:5555'
+      plugins:
+        statsd:
+          host: localhost
+          port: 8125
+          prefix: "artillery-exchange-caida"
+    docker:
+      target: 'http://nginx'
+      plugins:
+        statsd:
+          host: graphite
+          port: 8125
+          prefix: "artillery-exchange-caida-docker"
+
+  http:
+    timeout: 10
+
+  phases:
+    - name: "Carga constante 0.5B (caidas del proceso a los 60 y 120 s)"
+      duration: 180
+      arrivalRate: 160
+
+scenarios:
+  - name: "Exchange ARS -> USD"
+    weight: 1
+    flow:
+      - post:
+          url: '/exchange'
+          beforeRequest: "provocarCaida"
+          json:
+            baseCurrency: "ARS"
+            counterCurrency: "USD"
+            baseAmount: 1000
+            baseAccountId: 101
+            counterAccountId: 102
+  - name: "Exchange USD -> ARS"
+    weight: 1
+    flow:
+      - post:
+          url: '/exchange'
+          beforeRequest: "provocarCaida"
+          json:
+            baseCurrency: "USD"
+            counterCurrency: "ARS"
+            baseAmount: 1
+            baseAccountId: 102
+            counterAccountId: 101

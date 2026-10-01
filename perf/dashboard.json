@@ -1361,7 +1361,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 73
+        "y": 82
       },
       "id": 20,
       "panels": [],
@@ -1465,7 +1465,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 74
+        "y": 83
       },
       "id": 21,
       "options": {
@@ -1646,7 +1646,7 @@
         "h": 9,
         "w": 12,
         "x": 0,
-        "y": 84
+        "y": 93
       },
       "id": 22,
       "options": {
@@ -1791,7 +1791,7 @@
         "h": 9,
         "w": 12,
         "x": 12,
-        "y": 84
+        "y": 93
       },
       "id": 23,
       "options": {
@@ -1918,7 +1918,7 @@
         "h": 7,
         "w": 24,
         "x": 0,
-        "y": 93
+        "y": 102
       },
       "id": 24,
       "options": {
@@ -2100,6 +2100,137 @@
           "sort": "none"
         }
       }
+    },
+    {
+      "id": 32,
+      "type": "state-timeline",
+      "datasource": "Graphite",
+      "title": "Prueba de caída: ¿alguien se entera? Ping/echo a GET /health, estado según Docker y reinicios, segundo a segundo",
+      "description": "Lo registra monitor-salud.py cada 1 s. Ping/echo: GET /health a través de nginx con 0,8 s de timeout. Docker: estado del container y resultado de su healthcheck (docker inspect). Reinicios: RestartCount del container. Los valores se desplazan con offset() (ping +10, Docker +20, reinicios +30) solo para que cada estado tenga su propio color y texto.",
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 73
+      },
+      "interval": "1s",
+      "maxDataPoints": 2000,
+      "targets": [
+        {
+          "refId": "A",
+          "target": "alias(offset(stats.gauges.$server.salud.ping, 10), 'Ping/echo GET /health')"
+        },
+        {
+          "refId": "B",
+          "target": "alias(offset(stats.gauges.$server.salud.docker, 20), 'Docker (healthcheck)')"
+        },
+        {
+          "refId": "C",
+          "target": "alias(offset(stats.gauges.$server.salud.reinicios, 30), 'Reinicios del container')"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#5A5A5A"
+          },
+          "custom": {
+            "fillOpacity": 85,
+            "lineWidth": 0,
+            "spanNulls": true,
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            }
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "11": {
+                  "text": "responde 200",
+                  "color": "green",
+                  "index": 0
+                },
+                "10": {
+                  "text": "no responde",
+                  "color": "red",
+                  "index": 1
+                },
+                "9": {
+                  "text": "no existe /health (404)",
+                  "color": "#8F8F8F",
+                  "index": 2
+                },
+                "22": {
+                  "text": "healthy",
+                  "color": "green",
+                  "index": 3
+                },
+                "21": {
+                  "text": "starting",
+                  "color": "yellow",
+                  "index": 4
+                },
+                "20": {
+                  "text": "unhealthy",
+                  "color": "orange",
+                  "index": 5
+                },
+                "19": {
+                  "text": "running, sin healthcheck",
+                  "color": "#8F8F8F",
+                  "index": 6
+                },
+                "18": {
+                  "text": "container detenido",
+                  "color": "red",
+                  "index": 7
+                },
+                "30": {
+                  "text": "0 reinicios",
+                  "color": "#5A5A5A",
+                  "index": 8
+                },
+                "31": {
+                  "text": "1 reinicio",
+                  "color": "#B877D9",
+                  "index": 9
+                },
+                "32": {
+                  "text": "2 reinicios",
+                  "color": "#8F3BB8",
+                  "index": 10
+                },
+                "33": {
+                  "text": "3 reinicios",
+                  "color": "#6B2A8C",
+                  "index": 11
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "showValue": "auto",
+        "rowHeight": 0.8,
+        "mergeValues": true,
+        "alignValue": "left",
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.5.10"
     }
   ],
   "preload": false,
@@ -2182,9 +2313,19 @@
             "selected": false,
             "text": "artillery-exchange-carrera-saldo",
             "value": "artillery-exchange-carrera-saldo"
+          },
+          {
+            "selected": false,
+            "text": "artillery-exchange-caida",
+            "value": "artillery-exchange-caida"
+          },
+          {
+            "selected": false,
+            "text": "artillery-exchange-pedido-invalido",
+            "value": "artillery-exchange-pedido-invalido"
           }
         ],
-        "query": "artillery-exchange-breakpoint,artillery-exchange-stress,artillery-api,artillery-exchange-race,artillery-exchange-breakpoint-docker,artillery-exchange-stress-docker,artillery-exchange-stress-b450,artillery-exchange-stress-b450-docker,artillery-exchange-endurance-docker,artillery-exchange-endurance-320-docker,artillery-exchange-endurance,artillery-exchange-failure-recovery,,artillery-exchange-carrera-saldo",
+        "query": "artillery-exchange-breakpoint,artillery-exchange-stress,artillery-api,artillery-exchange-race,artillery-exchange-breakpoint-docker,artillery-exchange-stress-docker,artillery-exchange-stress-b450,artillery-exchange-stress-b450-docker,artillery-exchange-endurance-docker,artillery-exchange-endurance-320-docker,artillery-exchange-endurance,artillery-exchange-failure-recovery,,artillery-exchange-carrera-saldo,artillery-exchange-caida,artillery-exchange-pedido-invalido",
         "type": "custom"
       },
       {
