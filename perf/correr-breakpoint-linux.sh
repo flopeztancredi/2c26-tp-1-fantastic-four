@@ -114,13 +114,23 @@ else
 fi
 
 paso "Reseteando la api ($API_REPLICAS replica(s))"
+# primero se sacan todas las replicas: al bajar de 2 a 1, compose puede quedarse con exchange-api-2 y
+# no con la 1 (paso el 01/10 despues del breakpoint con 2 replicas), y todo lo que sigue (eventos,
+# logs, la falla inducida, las capturas) apunta a exchange-api-1..N
+ejecutar docker compose -f $COMPOSE rm -sf api > /dev/null 2>&1
 ejecutar docker compose -f $COMPOSE up -d --build --force-recreate --scale "api=$API_REPLICAS" api || falla "reset de la api"
+# nginx tambien se recrea: en las ramas sin resolve (el caso base) resuelve exchange-api-1 una sola
+# vez al arrancar, y la api recien creada puede tener otra IP
+ejecutar docker compose -f $COMPOSE up -d --no-deps --force-recreate nginx > /dev/null 2>&1 || falla "reset de nginx"
 if [ "$SECO" = 1 ]; then
   echo "+ (verificar con docker ps que corren exactamente $API_REPLICAS replicas: $(replicas_api | tr '\n' ' '))"
   ESTADO_API=archivos
 else
   CORRIENDO=$(docker ps --format '{{.Names}}' | grep -c -E '^exchange-api-[0-9]+$')
   [ "$CORRIENDO" = "$API_REPLICAS" ] || falla "se esperaban $API_REPLICAS replica(s) de la api y hay $CORRIENDO corriendo"
+  for c in $(replicas_api); do
+    docker ps --format '{{.Names}}' | grep -qx "$c" || falla "no esta corriendo $c (las replicas tienen que ser exchange-api-1..$API_REPLICAS)"
+  done
   # valor REAL del adapter, leido del container recien recreado (no adivinado por este script)
   ESTADO_API=$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' exchange-api-1 2> /dev/null \
     | sed -n 's/^STATE_ADAPTER=//p' | head -n1)
