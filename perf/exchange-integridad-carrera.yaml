@@ -1,0 +1,55 @@
+# Integridad: 40 cambios a la vez contra 100 USD, que alcanzan para 20. Ver GUIA_integridad-carrera.md.
+config:
+  environments:
+    api:
+      target: 'http://localhost:5555'
+      plugins:
+        statsd:
+          host: localhost
+          port: 8125
+          prefix: "artillery-exchange-carrera"
+    docker:
+      target: 'http://nginx'
+      plugins:
+        statsd:
+          host: graphite
+          port: 8125
+          prefix: "artillery-exchange-carrera-docker"
+
+  http:
+    timeout: 10
+
+  phases:
+    - name: "Rafaga: 40 cambios ARS -> USD concurrentes contra 100 USD de saldo"
+      duration: 1
+      arrivalCount: 40
+
+# antes de la rafaga: calienta la conexion, fija 5000 ARS = 5 USD y deja USD en 100
+before:
+  flow:
+    - loop:
+        - get:
+            url: '/rates'
+      count: 20
+    - put:
+        url: '/rates'
+        json:
+          baseCurrency: "ARS"
+          counterCurrency: "USD"
+          rate: 0.001
+    - put:
+        url: '/accounts/2/balance'
+        json:
+          balance: 100
+
+scenarios:
+  - name: "Exchange ARS -> USD (5 USD por pedido)"
+    flow:
+      - post:
+          url: '/exchange'
+          json:
+            baseCurrency: "ARS"
+            counterCurrency: "USD"
+            baseAmount: 5000
+            baseAccountId: 501
+            counterAccountId: 502
