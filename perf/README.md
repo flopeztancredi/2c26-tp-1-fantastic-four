@@ -15,6 +15,8 @@
 | `capturar-grafana.mjs` | Guarda un PNG por panel del dashboard para una corrida ya hecha |
 | `analizar-availability.py` | Tablas por ventana y por fase, B, t_rec y OOM de una corrida |
 | `dashboard.json` | Dashboard de Grafana para mirar la corrida en vivo |
+| `exchange-availability-failure-recovery.yaml` | Carga combinada de `/rates` y `/health` durante una caída provocada |
+| `correr-failure-recovery-linux.sh` | Inicia Artillery, ejecuta `docker kill` al segundo 60 y espera la finalización natural |
 | `DISENO_availability.md` | Qué se quiere probar y por qué las pruebas están armadas así: métricas, umbrales, P95 y fases |
 | `GUIA_breakpoint.md`, `GUIA_stress-recuperacion.md` | Cómo correr cada corrida, qué mirar y qué informar |
 | `GUIA_suite.md` | Procedimiento completo para correr la suite en una rama y comparar contra otras |

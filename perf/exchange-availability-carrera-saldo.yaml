@@ -1,0 +1,39 @@
+# Integridad: carrera en el control de saldo. 30 cambios ARS -> USD por segundo, de ~99,99 USD cada uno, durante 90 s.
+# En paralelo, reponer-saldo-carrera.py deja la cuenta USD de arVault en 1000 USD cada 10 s: por ciclo solo hay
+# fondos para 10 cambios. Si el control de saldo es correcto, el saldo nunca queda negativo. Ver README.md.
+config:
+  environments:
+    api:
+      target: 'http://localhost:5555'
+      plugins:
+        statsd:
+          host: localhost
+          port: 8125
+          prefix: "artillery-exchange-carrera-saldo"
+    docker:
+      target: 'http://nginx'
+      plugins:
+        statsd:
+          host: graphite
+          port: 8125
+          prefix: "artillery-exchange-carrera-saldo-docker"
+
+  http:
+    timeout: 10
+
+  phases:
+    - name: "Carrera: 30 req/s de ~99,99 USD con 1000 USD por ciclo de 10 s"
+      duration: 90
+      arrivalRate: 30
+
+scenarios:
+  - name: "Exchange ARS -> USD (~99,99 USD)"
+    flow:
+      - post:
+          url: '/exchange'
+          json:
+            baseCurrency: "ARS"
+            counterCurrency: "USD"
+            baseAmount: 151500
+            baseAccountId: 101
+            counterAccountId: 102
