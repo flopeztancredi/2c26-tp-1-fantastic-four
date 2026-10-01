@@ -1,0 +1,144 @@
+# cliente representativo: mira las tasas, piensa (como una persona mirando la app) y despues
+# cambia moneda y mira sus cuentas. ver GUIA_suite.md. llegada constante (no un escalon ni un
+# pico), para tener una foto del comportamiento normal, comparable entre ramas.
+#
+# mezcla de pares (siempre con ARS de un lado: solo hay tasa ARS <-> cada moneda, nunca
+# EUR <-> USD ni EUR <-> BRL):
+#   - ARS <-> USD: 70 % (35 % + 35 %), el par mas usado del servicio
+#   - ARS <-> EUR: 20 % (10 % + 10 %)
+#   - ARS <-> BRL: 10 % (5 % + 5 %)
+# dentro de cada moneda, mitad compra y mitad vende (peso igual entre las dos direcciones).
+#
+# montos: fijos (1000 ARS, 1 unidad de moneda extranjera), igual que breakpoint/stress/endurance.
+# ojo: tienen que ser numeros, no template de artillery. "{{ $randomNumber(...) }}" renderiza
+# STRING aunque este adentro de un campo numerico del json (confirmado con un echo server
+# aislado: baseAmount llegaba como "1018", con comillas). en app/exchange.js el balance se
+# actualiza con += / -=, y += sobre un string concatena en vez de sumar: corrompe saldos en vez
+# de pifiarle solo a la variedad del monto. con esta escala y 80 escenarios/s durante 10 min, el
+# volumen total queda muy por debajo de los saldos iniciales (ver GUIA_endurance-performance.md:
+# a esa escala alcanzan para ~470.000 exchanges).
+# think si se banca el template: "{{ $randomNumber(1, 3) }}" randomiza bien (confirmado con el
+# propio resumen de artillery, session_length min~1000ms max~3000ms), porque think no entra a un
+# json ni a una cuenta: artillery lo usa directo como numero de segundos.
+config:
+  environments:
+    api:
+      target: 'http://localhost:5555'
+      plugins:
+        statsd:
+          host: localhost
+          port: 8125
+          prefix: "artillery-exchange-representativa"
+    docker:
+      target: 'http://nginx'
+      plugins:
+        statsd:
+          host: graphite
+          port: 8125
+          prefix: "artillery-exchange-representativa-docker"
+
+  http:
+    timeout: 10
+
+  phases:
+    - name: "Llegada constante 80 escenarios/s"
+      duration: 600
+      arrivalRate: 80
+
+scenarios:
+  - name: "Cliente: ARS -> USD"
+    weight: 35
+    flow:
+      - get:
+          url: '/rates'
+      - think: "{{ $randomNumber(1, 3) }}"
+      - post:
+          url: '/exchange'
+          json:
+            baseCurrency: "ARS"
+            counterCurrency: "USD"
+            baseAmount: 1000
+            baseAccountId: 101
+            counterAccountId: 102
+      - get:
+          url: '/accounts'
+  - name: "Cliente: USD -> ARS"
+    weight: 35
+    flow:
+      - get:
+          url: '/rates'
+      - think: "{{ $randomNumber(1, 3) }}"
+      - post:
+          url: '/exchange'
+          json:
+            baseCurrency: "USD"
+            counterCurrency: "ARS"
+            baseAmount: 1
+            baseAccountId: 102
+            counterAccountId: 101
+      - get:
+          url: '/accounts'
+  - name: "Cliente: ARS -> EUR"
+    weight: 10
+    flow:
+      - get:
+          url: '/rates'
+      - think: "{{ $randomNumber(1, 3) }}"
+      - post:
+          url: '/exchange'
+          json:
+            baseCurrency: "ARS"
+            counterCurrency: "EUR"
+            baseAmount: 1000
+            baseAccountId: 101
+            counterAccountId: 103
+      - get:
+          url: '/accounts'
+  - name: "Cliente: EUR -> ARS"
+    weight: 10
+    flow:
+      - get:
+          url: '/rates'
+      - think: "{{ $randomNumber(1, 3) }}"
+      - post:
+          url: '/exchange'
+          json:
+            baseCurrency: "EUR"
+            counterCurrency: "ARS"
+            baseAmount: 1
+            baseAccountId: 103
+            counterAccountId: 101
+      - get:
+          url: '/accounts'
+  - name: "Cliente: ARS -> BRL"
+    weight: 5
+    flow:
+      - get:
+          url: '/rates'
+      - think: "{{ $randomNumber(1, 3) }}"
+      - post:
+          url: '/exchange'
+          json:
+            baseCurrency: "ARS"
+            counterCurrency: "BRL"
+            baseAmount: 1000
+            baseAccountId: 101
+            counterAccountId: 104
+      - get:
+          url: '/accounts'
+  - name: "Cliente: BRL -> ARS"
+    weight: 5
+    flow:
+      - get:
+          url: '/rates'
+      - think: "{{ $randomNumber(1, 3) }}"
+      - post:
+          url: '/exchange'
+          json:
+            baseCurrency: "BRL"
+            counterCurrency: "ARS"
+            baseAmount: 1
+            baseAccountId: 104
+            counterAccountId: 101
+      - get:
+          url: '/accounts'

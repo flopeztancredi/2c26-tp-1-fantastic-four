@@ -7,13 +7,18 @@
 | `exchange-availability-breakpoint.yaml` | Corrida 1, breakpoint: escalones de 160 a 640 req/s para encontrar el boundary B |
 | `exchange-availability-stress.yaml` | Corrida 2, stress + recuperación con B = 320 |
 | `exchange-availability-stress-b450.yaml` | Corrida 2, variante con B = 450 como hipótesis |
+| `exchange-availability-spike.yaml` | Corrida cambiaria: pico corto a 2B, todos comprando dólares |
+| `exchange-performance-representativa.yaml` | Cliente representativo, llegada constante, mezcla de pares y montos |
 | `correr-breakpoint-docker.ps1` | Corre cualquiera de los YAML en **Windows** |
 | `correr-breakpoint-linux.sh` | Corre cualquiera de los YAML en **Linux** |
+| `correr-suite-linux.sh` | Corre una lista de escenarios, cada uno varias veces, y llama a la captura al final |
+| `capturar-grafana.mjs` | Guarda un PNG por panel del dashboard para una corrida ya hecha |
 | `analizar-availability.py` | Tablas por ventana y por fase, B, t_rec y OOM de una corrida |
 | `dashboard.json` | Dashboard de Grafana para mirar la corrida en vivo |
 | `DISENO_availability.md` | Qué se quiere probar y por qué las pruebas están armadas así: métricas, umbrales, P95 y fases |
 | `GUIA_breakpoint.md`, `GUIA_stress-recuperacion.md` | Cómo correr cada corrida, qué mirar y qué informar |
-| `package.json`, `package-lock.json` | artillery 2.0.22 y el plugin de statsd, con versiones fijas |
+| `GUIA_suite.md` | Procedimiento completo para correr la suite en una rama y comparar contra otras |
+| `package.json`, `package-lock.json` | artillery 2.0.22, el plugin de statsd y puppeteer-core, con versiones fijas |
 | `rates.yaml`, `run-scenario.sh` | Ejemplo original del enunciado |
 
 ## Requisitos
@@ -28,15 +33,23 @@ El sistema bajo prueba es el `docker-compose.yml` de la raíz, sin cambios: api 
 
 Los dos siguen los mismos pasos y dejan todo en `resultados/<fecha>_<nombre>/`:
 
-1. Levantan el sistema, verifican que haya una sola réplica de la api y **resetean la api**: recrean su container, así que vuelven los saldos iniciales y el log queda vacío.
-2. Registran los eventos de los containers api y nginx (`die`, `oom`, `restart`) y los sockets del cliente cada 5 s.
+1. Levantan el sistema y **resetean la api** con `API_REPLICAS` réplicas (default 1): recrean su
+   container, así que vuelven los saldos iniciales y el log queda vacío, y verifican que arrancó
+   exactamente esa cantidad. Si hay un container `redis` corriendo (rama `tactica/redis`), lo
+   vacía antes de resetear y registra `ESTADO_API` (el valor real, leído del container con
+   `docker inspect`) y `HAY_REDIS` en `entorno.txt`. La etiqueta usa ese nombre, no
+   `STATE_ADAPTER`: esa es la variable que lee la propia api para elegir su adapter, y
+   reasignarla acá pisaría el valor real si ya venía exportada desde afuera.
+2. Registran los eventos de los containers api (todas las réplicas) y nginx (`die`, `oom`,
+   `restart`) y los sockets del cliente cada 5 s.
 3. Corren artillery con el YAML elegido.
 4. Guardan:
    - saldos antes y después;
-   - estado final de la api;
-   - logs de nginx y api;
+   - estado final de cada réplica de la api;
+   - logs de nginx y de la api;
    - CPU y memoria (cadvisor) y métricas de artillery, exportadas desde graphite;
-   - una copia del YAML usado y el entorno (`entorno.txt`).
+   - una copia del YAML usado y el entorno (`entorno.txt`, con hardware, réplicas, adapter de
+     estado y temperatura de CPU al empezar y al terminar).
 
 | | Windows | Linux |
 |---|---|---|
@@ -55,7 +68,7 @@ Sin parámetros, los dos scripts corren el breakpoint.
   - **Se evita el port-forwarding de Docker Desktop** entre Windows y la VM.
   - **cadvisor mide también el consumo del generador** (container `artillery`).
 - **Costo:** el generador comparte la VM con el sistema. Si la VM se cuelga, también se cuelga el que mide.
-- En Linux los valores de red por defecto alcanzan, así que artillery corre en el host.
+- En Linux se supuso que los valores de red por defecto alcanzaban y artillery corría en el host. No alcanzan: el 01/10, con artillery en el host, los breakpoints de la base, de rate limiting y de Redis cortaron los tres entre 400 y 480 req/s con `ECONNRESET`, con la api lejos de saturarse. Cada conexión pasa por `docker-proxy` y deja un puerto efímero en TIME_WAIT 60 s; con el rango por defecto (32768 a 60999) y `tcp_tw_reuse=2`, que solo reutiliza en loopback, el host no abre más de unas 470 conexiones nuevas por segundo. Desde entonces `correr-breakpoint-linux.sh` también corre artillery en un container de `exchange_default` (imagen `node:24`, con el `node_modules` de `perf/`), con los mismos `--sysctl` que en Windows, en los CPUs de `ARTILLERY_CPUSET`.
 - Para confirmar que el límite no fue el cliente, en ninguna corrida tiene que aparecer `EADDRNOTAVAIL` ni `EADDRINUSE`.
 
 ## Replicar las corridas
@@ -70,6 +83,38 @@ Desde `perf/`, con el host enchufado, sin aplicaciones pesadas y con Grafana con
 
 - **B depende del entorno.** Antes de correr el stress en otra máquina, correr el breakpoint en esa misma máquina y ajustar los `arrivalRate` del YAML de stress (ver `GUIA_stress-recuperacion.md`).
 - **Duración:** unos 8 min el breakpoint y unos 6 a 7 min cada stress. En Windows se suman 1 o 2 min de `npm ci`.
+
+## Correr la suite completa (Linux)
+
+Para comparar ramas hay que correr los mismos escenarios, la misma cantidad de veces, en cada
+una. Eso lo automatiza `correr-suite-linux.sh`: por cada escenario y cada corrida, espera una
+quietud (para que los paneles bajen a la línea de base de la corrida anterior), corre
+`correr-breakpoint-linux.sh` (que hace su propio reset, réplicas y redis si corresponde) y al
+final captura el dashboard con `capturar-grafana.mjs`. También puede inducir una falla de la api
+a mitad de corrida (`FALLA=kill|stop|crash`) para medir recuperación. Procedimiento completo, con
+qué revisar antes de medir, las variables de entorno y cómo comparar ramas: **`GUIA_suite.md`**.
+
+```sh
+bash correr-suite-linux.sh exchange-availability-breakpoint
+EXCHANGE_SPIKE_RATE=960 bash correr-suite-linux.sh exchange-availability-spike
+```
+
+Antes de una corrida real, conviene revisar la secuencia sin tocar Docker (el spike igual
+necesita `EXCHANGE_SPIKE_RATE`, ver `GUIA_suite.md`):
+
+```sh
+SECO=1 bash correr-suite-linux.sh exchange-availability-breakpoint
+```
+
+## Capturar el dashboard
+
+`capturar-grafana.mjs` guarda un PNG por panel del dashboard (rango: `inicio.txt`/`fin.txt` de la
+corrida, con 30 s de margen) en `<carpeta>/capturas/`. La suite ya la llama al final de cada
+corrida; para una carpeta vieja o para probarla contra Grafana:
+
+```sh
+node capturar-grafana.mjs resultados/<carpeta>
+```
 
 ## Analizar
 

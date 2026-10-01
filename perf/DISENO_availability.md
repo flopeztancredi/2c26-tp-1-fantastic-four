@@ -29,11 +29,12 @@ Cada informe recorre los 7 pasos del *performance testing process*: entorno, cri
 
 ## 2. Cómo se mide "disponible"
 
-Se mide **desde el cliente**, que es lo que ve un usuario: un request sirve si vuelve con 2xx a tiempo.
+Se mide **desde el cliente**, que es lo que ve un usuario: un request sirve si vuelve atendido (2xx o 4xx) a tiempo.
 
-- **% de éxito = 2xx / (todas las respuestas HTTP + todos los errores de red).**
+- **% de éxito = (2xx + 4xx) / (todas las respuestas HTTP + todos los errores de red).**
   - Los errores de red (`ETIMEDOUT`, `ECONNRESET`) **cuentan como no disponibles**. Cuando el sistema se satura o la api muere, la mayoría de las fallas le llegan al cliente así, sin código HTTP. Contar solo códigos HTTP sobreestimaría mucho la disponibilidad.
-  - Solo cuenta 2xx. Un 5xx es un request no atendido. Los 500 por "Not enough funds" se evitan desde el escenario (sección 4), porque son una regla de negocio y no falta de disponibilidad.
+  - **Cuenta como atendido cualquier respuesta que no sea 5xx.** Decisión del grupo: un 4xx (400 por request mal formado, 422 por "Not enough funds", 429 por rate limiting) es una respuesta correcta del servicio, no una falla de availability. La falla es que el servicio no responda o responda mal: un 5xx, un timeout o un error de red. Hoy este código todavía responde 500 ante "Not enough funds" (`app/app.js`); las corridas de disponibilidad casi no lo disparan porque usan montos chicos (sección 4), así que en la práctica no cambia el resultado, pero el criterio ya cuenta cualquier 4xx que aparezca.
+  - **El 429 se muestra también aparte** (panel y tabla, no solo en el % agregado): cuenta como atendido, pero es carga descartada a propósito por rate limiting, no un éxito del negocio, y conviene poder distinguir cuánto de "atendido" es en realidad ese descarte.
 - **Umbral: 99 %, por ventana o por escalón.** Es un umbral por requests, no el "99 %" de un SLA anual. Tolera un error aislado, como un 502 suelto, y detecta una falla sistemática.
 - **Ventanas de 10 s.** Es la granularidad con la que reporta artillery y la resolución de graphite. Un agregado de toda la corrida escondería cuándo empieza la falla, cuánto dura y si hay rebotes.
 - **Timeout del cliente: 10 s.** Un request más lento se corta y cuenta como `ETIMEDOUT`: para un cliente, una respuesta que no llega en 10 s es un servicio no disponible.

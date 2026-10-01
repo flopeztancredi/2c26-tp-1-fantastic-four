@@ -1,0 +1,51 @@
+# corrida cambiaria: pico corto de demanda de dolares (todos compran, nadie vende), para ver si
+# el sistema degrada o colapsa ante un salto abrupto y si se recupera solo. usa GUIA_suite.md.
+# la tasa del pico tiene que ser 2B req/s, con B = breakpoint medido en ESTA maquina (320 req/s
+# fue el numero que dio en otra maquina, no sirve como referencia general). la tasa sale de la
+# variable de entorno EXCHANGE_SPIKE_RATE (Artillery 2.0.22 soporta "{{ $processEnvironment.VAR }}"
+# en arrivalRate: probado contra un puerto cerrado, sin pegarle a arVault), sin ningun default:
+# correr-breakpoint-linux.sh FALLA si se corre este escenario sin esa variable seteada a mano,
+# en vez de asumir un numero generico.
+config:
+  environments:
+    api:
+      target: 'http://localhost:5555'
+      plugins:
+        statsd:
+          host: localhost
+          port: 8125
+          prefix: "artillery-exchange-spike"
+    docker:
+      target: 'http://nginx'
+      plugins:
+        statsd:
+          host: graphite
+          port: 8125
+          prefix: "artillery-exchange-spike-docker"
+
+  http:
+    timeout: 10
+
+  phases:
+    - name: "Carga normal 160 req/s"
+      duration: 60
+      arrivalRate: 160
+    - name: "Corrida cambiaria 2B"
+      duration: 20
+      arrivalRate: "{{ $processEnvironment.EXCHANGE_SPIKE_RATE }}"
+    - name: "Vuelta a la normalidad 160 req/s"
+      duration: 120
+      arrivalRate: 160
+
+scenarios:
+  - name: "Exchange ARS -> USD"
+    weight: 1
+    flow:
+      - post:
+          url: '/exchange'
+          json:
+            baseCurrency: "ARS"
+            counterCurrency: "USD"
+            baseAmount: 1000
+            baseAccountId: 101
+            counterAccountId: 102

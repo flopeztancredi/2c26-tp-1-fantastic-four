@@ -21,13 +21,14 @@
   "panels": [
     {
       "aliasColors": {
-        "% éxito": "#7EB26D"
+        "% atendido (2xx+4xx)": "#7EB26D",
+        "429 (descartado, rate limit)": "#E0752D"
       },
       "bars": false,
       "dashLength": 10,
       "dashes": false,
       "datasource": "Graphite",
-      "description": "Respuestas 2xx / (todas las respuestas HTTP + errores de red como ETIMEDOUT o ECONNREFUSED), por cada reporte de artillery (10 s). La línea roja marca el umbral acordado (99 %): los escalones debajo de la línea no cuentan como 'disponibles'. Un hueco sin datos = no hubo ninguna respuesta ni error en esa ventana.",
+      "description": "Atendido = 2xx + 4xx (todas las respuestas HTTP salvo 5xx) sobre (todas las respuestas HTTP + errores de red como ETIMEDOUT o ECONNREFUSED), por cada reporte de artillery (10 s). Un 4xx (400, 404, 422, 429) es una respuesta correcta del servicio: la falla es un 5xx, un error de red o un timeout (ver DISENO_availability.md). El 429 se muestra tambien aparte (barras, eje derecho) porque es carga descartada a proposito por rate limiting, no un exito del negocio. La linea roja marca el umbral acordado (99 %): los escalones debajo de la linea no cuentan como 'disponibles'. Un hueco sin datos = no hubo ninguna respuesta ni error en esa ventana.",
       "fieldConfig": {
         "defaults": {
           "custom": {}
@@ -70,14 +71,27 @@
       "pointradius": 3,
       "points": true,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "429 (descartado, rate limit)",
+          "yaxis": 2,
+          "lines": false,
+          "bars": true,
+          "fill": 0
+        }
+      ],
       "spaceLength": 10,
       "stack": false,
       "steppedLine": false,
       "targets": [
         {
           "refId": "A",
-          "target": "alias(asPercent(sumSeries(stats.gauges.$server.codes.2*, scale(stats.gauges.$server.scenariosCreated, 0)), sumSeries(stats.gauges.$server.codes.*, stats.gauges.$server.errors.*)), '% éxito')",
+          "target": "alias(asPercent(sumSeries(stats.gauges.$server.codes.2*, stats.gauges.$server.codes.4*, scale(stats.gauges.$server.scenariosCreated, 0)), sumSeries(stats.gauges.$server.codes.*, stats.gauges.$server.errors.*)), '% atendido (2xx+4xx)')",
+          "textEditor": true
+        },
+        {
+          "refId": "B",
+          "target": "alias(sumSeries(stats.gauges.$server.codes.429), '429 (descartado, rate limit)')",
           "textEditor": true
         }
       ],
@@ -134,13 +148,14 @@
     {
       "aliasColors": {
         "Carga ofrecida": "#8AB8FF",
-        "Throughput 2xx": "#7EB26D"
+        "Throughput atendido (2xx+4xx)": "#7EB26D",
+        "429 (descartado, rate limit)": "#E0752D"
       },
       "bars": false,
       "dashLength": 10,
       "dashes": false,
       "datasource": "Graphite",
-      "description": "Carga ofrecida = usuarios virtuales creados por segundo (cada uno hace 1 request). Throughput = respuestas 2xx por segundo. Mientras las dos líneas coinciden, el sistema atiende todo lo que recibe; donde el throughput se aplana o cae, se alcanzó la capacity (throughput máximo).",
+      "description": "Carga ofrecida = usuarios virtuales creados por segundo (cada uno hace 1 request). Throughput atendido = respuestas 2xx+4xx por segundo (todo lo que el sistema resolvio, sin contar 5xx ni errores de red). El 429 se muestra aparte (barras, eje derecho): es carga descartada a proposito por rate limiting, no trabajo de negocio real. Mientras las lineas de carga ofrecida y throughput atendido coinciden, el sistema resuelve todo lo que recibe; donde el throughput se aplana o cae, se alcanzo la capacity.",
       "fieldConfig": {
         "defaults": {
           "custom": {}
@@ -183,7 +198,15 @@
       "pointradius": 3,
       "points": true,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "429 (descartado, rate limit)",
+          "yaxis": 2,
+          "lines": false,
+          "bars": true,
+          "fill": 0
+        }
+      ],
       "spaceLength": 10,
       "stack": false,
       "steppedLine": false,
@@ -195,7 +218,12 @@
         },
         {
           "refId": "B",
-          "target": "alias(scale(sumSeries(stats.gauges.$server.codes.2*), 0.1), 'Throughput 2xx')",
+          "target": "alias(scale(sumSeries(stats.gauges.$server.codes.2*, stats.gauges.$server.codes.4*), 0.1), 'Throughput atendido (2xx+4xx)')",
+          "textEditor": true
+        },
+        {
+          "refId": "C",
+          "target": "alias(scale(stats.gauges.$server.codes.429, 0.1), '429 (descartado, rate limit)')",
           "textEditor": true
         }
       ],
@@ -203,7 +231,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Carga ofrecida vs. throughput 2xx (req/s)",
+      "title": "Carga ofrecida vs. throughput atendido (req/s)",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -1343,76 +1371,40 @@
   "templating": {
     "list": [
       {
+        "name": "server",
+        "type": "query",
+        "datasource": "Graphite",
+        "query": "stats.gauges.artillery-*",
+        "definition": "stats.gauges.artillery-*",
+        "refresh": 1,
+        "regex": "",
+        "sort": 1,
+        "multi": false,
+        "includeAll": false,
         "allValue": null,
         "current": {
           "selected": true,
           "text": "artillery-exchange-breakpoint",
           "value": "artillery-exchange-breakpoint"
         },
-        "description": "Prefijo statsd del YAML de artillery que se está mirando.",
-        "error": null,
-        "hide": 0,
-        "includeAll": false,
+        "options": [],
         "label": "Corrida (prefijo)",
-        "multi": false,
-        "name": "server",
-        "options": [
-          {
-            "selected": true,
-            "text": "artillery-exchange-breakpoint",
-            "value": "artillery-exchange-breakpoint"
-          },
-          {
-            "selected": false,
-            "text": "artillery-exchange-stress",
-            "value": "artillery-exchange-stress"
-          },
-          {
-            "selected": false,
-            "text": "artillery-api",
-            "value": "artillery-api"
-          },
-          {
-            "selected": false,
-            "text": "artillery-exchange-race",
-            "value": "artillery-exchange-race"
-          },
-          {
-            "selected": false,
-            "text": "artillery-exchange-breakpoint-docker",
-            "value": "artillery-exchange-breakpoint-docker"
-          },
-          {
-            "selected": false,
-            "text": "artillery-exchange-stress-docker",
-            "value": "artillery-exchange-stress-docker"
-          },
-          {
-            "selected": false,
-            "text": "artillery-exchange-stress-b450",
-            "value": "artillery-exchange-stress-b450"
-          },
-          {
-            "selected": false,
-            "text": "artillery-exchange-stress-b450-docker",
-            "value": "artillery-exchange-stress-b450-docker"
-          },
-          {
-            "selected": false,
-            "text": "artillery-exchange-endurance-docker",
-            "value": "artillery-exchange-endurance-docker"
-          },
-          {
-            "selected": false,
-            "text": "artillery-exchange-endurance-320-docker",
-            "value": "artillery-exchange-endurance-320-docker"
-          }
-        ],
-        "query": "artillery-exchange-breakpoint,artillery-exchange-stress,artillery-api,artillery-exchange-race,artillery-exchange-breakpoint-docker,artillery-exchange-stress-docker,artillery-exchange-stress-b450,artillery-exchange-stress-b450-docker,artillery-exchange-endurance-docker,artillery-exchange-endurance-320-docker",
+        "description": "Prefijo statsd del escenario de artillery que se esta mirando. Se arma solo, consultando graphite (stats.gauges.artillery-*): un escenario nuevo aparece sin tocar el dashboard.",
+        "hide": 0,
         "skipUrlSync": false,
-        "type": "custom"
+        "error": null
       },
       {
+        "name": "container",
+        "type": "query",
+        "datasource": "Graphite",
+        "query": "stats.gauges.cadvisor.exchange-*",
+        "definition": "stats.gauges.cadvisor.exchange-*",
+        "refresh": 1,
+        "regex": "",
+        "sort": 1,
+        "multi": true,
+        "includeAll": false,
         "allValue": null,
         "current": {
           "selected": true,
@@ -1425,59 +1417,12 @@
             "exchange-nginx-1"
           ]
         },
-        "description": "Containers a mostrar en CPU y memoria. Con --scale api=N, seleccioná todas las réplicas exchange-api-*.",
-        "error": null,
-        "hide": 0,
-        "includeAll": false,
+        "options": [],
         "label": "Containers",
-        "multi": true,
-        "name": "container",
-        "options": [
-          {
-            "selected": true,
-            "text": "exchange-api-1",
-            "value": "exchange-api-1"
-          },
-          {
-            "selected": false,
-            "text": "exchange-api-2",
-            "value": "exchange-api-2"
-          },
-          {
-            "selected": false,
-            "text": "exchange-api-3",
-            "value": "exchange-api-3"
-          },
-          {
-            "selected": true,
-            "text": "exchange-nginx-1",
-            "value": "exchange-nginx-1"
-          },
-          {
-            "selected": false,
-            "text": "exchange-cadvisor-1",
-            "value": "exchange-cadvisor-1"
-          },
-          {
-            "selected": false,
-            "text": "exchange-grafana-1",
-            "value": "exchange-grafana-1"
-          },
-          {
-            "selected": false,
-            "text": "exchange-graphite-1",
-            "value": "exchange-graphite-1"
-          },
-          {
-            "selected": false,
-            "text": "artillery",
-            "value": "artillery"
-          }
-        ],
-        "query": "exchange-api-1,exchange-api-2,exchange-api-3,exchange-nginx-1,exchange-cadvisor-1,exchange-grafana-1,exchange-graphite-1,artillery",
-        "queryValue": "",
+        "description": "Containers a mostrar en CPU y memoria (cadvisor). Se arma solo, consultando graphite (stats.gauges.cadvisor.exchange-*): una replica nueva (--scale api=N) o exchange-redis-1 (rama tactica/redis) aparecen sin tocar el dashboard.",
+        "hide": 0,
         "skipUrlSync": false,
-        "type": "custom"
+        "error": null
       }
     ]
   },

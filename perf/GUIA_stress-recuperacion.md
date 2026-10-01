@@ -26,7 +26,7 @@ Todas las fases corren en una sola ejecución de artillery. El timeout es de 10 
 
 ## Criterios
 
-- **Ventana disponible:** % de éxito ≥ 99 % en una ventana de 10 s, con el mismo cálculo que en el breakpoint.
+- **Ventana disponible:** % de éxito ≥ 99 % en una ventana de 10 s, con el mismo cálculo que en el breakpoint: % de éxito = (2xx + 4xx) / (todas las respuestas HTTP + errores de red). Cuenta como atendido cualquier respuesta que no sea 5xx; el 429 se muestra también aparte (ver `DISENO_availability.md`, sección 2).
 - **t_rec:** desde el inicio de la recuperación (t0) hasta el inicio de la primera de **3 ventanas seguidas** disponibles.
 - **Tope (RTO): 180 s.** Si no aparecen esas 3 ventanas antes del fin de la recuperación, el resultado es "no se recuperó".
 - **Recuperación completa:** en la verificación, ≥ 99 % de éxito y un P95 no más de un 10 % peor que el del escalón B del breakpoint.
