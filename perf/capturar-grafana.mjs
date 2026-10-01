@@ -39,8 +39,11 @@ function leerEntero(archivo) {
 
 // el prefijo de statsd de este escenario: si no lo pasan, sale del yaml copiado en la carpeta
 // (mismo criterio de correr-breakpoint-linux.sh: exchange-<categoria>-<corto> -> "corto")
+// ojo: desde que Artillery corre en un container, la carpeta tiene tambien escenario-en-red.yaml (la
+// copia con el target cambiado), que va primero en orden alfabetico; el prefijo sale del exchange-*.yaml
 function derivarPrefijo() {
-  const yaml = fs.readdirSync(carpeta).find((f) => f.endsWith(".yaml"));
+  const yamls = fs.readdirSync(carpeta).filter((f) => f.endsWith(".yaml"));
+  const yaml = yamls.find((f) => f.startsWith("exchange-")) ?? yamls[0];
   if (!yaml) {
     console.error(`ERROR: no encontre un .yaml en ${carpeta} para deducir el prefijo, pasalo como segundo argumento`);
     process.exit(1);
