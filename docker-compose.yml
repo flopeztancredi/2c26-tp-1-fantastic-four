@@ -5,6 +5,7 @@ services:
       mem_limit: 512m
       # si el proceso termina por un error, Docker lo vuelve a levantar; no lo hace si se lo detiene a mano
       restart: unless-stopped
+      stop_grace_period: 10s
       # ping/echo: Docker consulta GET /health; el estado (starting, healthy, unhealthy) queda en docker ps y docker events
       healthcheck:
         test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
@@ -25,6 +26,9 @@ services:
             - ./store/static/files:/static:ro
         links:
             - api
+        depends_on:
+            api:
+                condition: service_healthy
 
     graphite:
         image: graphiteapp/graphite-statsd:1.1.10-5

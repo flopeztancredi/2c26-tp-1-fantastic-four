@@ -9,11 +9,12 @@ import {
   getLog,
   exchange,
 } from "./exchange.js";
+import { saveAll } from "./state.js";
 
 await exchangeInit();
 
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
 
 app.use(express.json());
 
@@ -99,8 +100,28 @@ app.post("/exchange", async (req, res) => {
   }
 });
 
-app.listen(port, () => {
-  console.log(`Exchange API listening on port ${port}`);
+const server = app.listen(port, () => {
+  console.log(`Exchange API listening on port ${server.address().port}`);
 });
+
+//graceful shutdown
+let shuttingDown = false;
+
+async function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`${signal} received, shutting down`);
+
+  await Promise.race([
+    new Promise((resolve) => server.close(resolve)),
+    new Promise((resolve) => setTimeout(resolve, 8000)),
+  ]);
+
+  await saveAll();
+  process.exit(0);
+}
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
 
 export default app;
