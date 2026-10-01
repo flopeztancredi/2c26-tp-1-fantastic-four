@@ -8,6 +8,7 @@ export async function createFileAdapter({ dir, persist = true }) {
   const accountsFile = path.join(dir, "accounts.json");
   const ratesFile = path.join(dir, "rates.json");
   const logFile = path.join(dir, "log.jsonl");
+  const auditFile = path.join(dir, "audit.jsonl");
 
   const accounts = await load(accountsFile);
   const rates = await load(ratesFile);
@@ -42,19 +43,18 @@ export async function createFileAdapter({ dir, persist = true }) {
       return null;
     },
 
-    async setAccountBalance(accountId, balance) {
-      const account = findAccountById(accounts, accountId);
-
-      if (account != null) {
-        account.balance = balance;
-      }
+    //the audit entry is written first: without it there is no change
+    async setAccountBalance(accountId, balance, audit) {
+      await appendLine(auditFile, audit);
+      findAccountById(accounts, accountId).balance = balance;
     },
 
     async getRates() {
       return rates;
     },
 
-    async setRate({ baseCurrency, counterCurrency, rate }) {
+    async setRate({ baseCurrency, counterCurrency, rate }, audit) {
+      await appendLine(auditFile, audit);
       rates[baseCurrency][counterCurrency] = rate;
       rates[counterCurrency][baseCurrency] = Number((1 / rate).toFixed(5));
     },
@@ -64,7 +64,11 @@ export async function createFileAdapter({ dir, persist = true }) {
     },
 
     async appendLog(entry) {
-      await fs.promises.appendFile(logFile, JSON.stringify(entry) + "\n");
+      await appendLine(logFile, entry);
+    },
+
+    async getAudit() {
+      return loadLog(auditFile);
     },
 
     //no await inside: node runs it whole, so check and discount are atomic
@@ -124,6 +128,10 @@ async function load(filePath) {
       console.error(`Error loading ${filePath}:`, err);
     }
   }
+}
+
+async function appendLine(filePath, entry) {
+  await fs.promises.appendFile(filePath, JSON.stringify(entry) + "\n");
 }
 
 async function loadLog(filePath) {

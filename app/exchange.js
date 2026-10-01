@@ -37,8 +37,22 @@ export async function isSupportedPair(baseCurrency, counterCurrency) {
 }
 
 //sets balance for an account
-export async function setAccountBalance(accountId, balance) {
-  await repository.setAccountBalance(accountId, balance);
+export async function setAccountBalance(accountId, balance, actor = null) {
+  const accounts = await repository.getAccounts();
+  const account = accounts.find((account) => account.id == accountId);
+
+  const audit = {
+    id: nanoid(),
+    ts: new Date(),
+    action: "set-balance",
+    actor,
+    accountId: account.id,
+    currency: account.currency,
+    before: account.balance,
+    after: balance,
+  };
+
+  await repository.setAccountBalance(accountId, balance, audit);
 }
 
 //returns all current exchange rates
@@ -51,13 +65,31 @@ export async function getLog() {
   return repository.getLog();
 }
 
+//returns who changed balances and rates, and when
+export async function getAudit() {
+  return repository.getAudit();
+}
+
 //sets the exchange rate for a given pair of currencies, and the reciprocal rate as well
-export async function setRate(rateRequest) {
-  await repository.setRate(rateRequest);
+export async function setRate(rateRequest, actor = null) {
+  const { baseCurrency, counterCurrency, rate } = rateRequest;
+  const rates = await repository.getRates();
+
+  const audit = {
+    id: nanoid(),
+    ts: new Date(),
+    action: "set-rate",
+    actor,
+    pair: `${baseCurrency}/${counterCurrency}`,
+    before: rates[baseCurrency]?.[counterCurrency] ?? null,
+    after: rate,
+  };
+
+  await repository.setRate(rateRequest, audit);
 }
 
 //executes an exchange operation
-export async function exchange(exchangeRequest) {
+export async function exchange(exchangeRequest, actor = null) {
   const {
     baseCurrency,
     counterCurrency,
@@ -81,6 +113,7 @@ export async function exchange(exchangeRequest) {
     id: nanoid(),
     ts: new Date(),
     ok: false,
+    actor,
     request: exchangeRequest,
     exchangeRate: exchangeRate,
     counterAmount: 0.0,

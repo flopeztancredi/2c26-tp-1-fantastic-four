@@ -7,6 +7,7 @@ import {
   getRates,
   setRate,
   getLog,
+  getAudit,
   exchange,
   isKnownCurrency,
   isKnownAccount,
@@ -90,6 +91,9 @@ async function validateRate(body) {
   return null;
 }
 
+//user authenticated by vaultSec
+const actorOf = (req) => req.get("X-Authenticated-User") ?? null;
+
 // ACCOUNT endpoints
 
 app.get("/accounts", asyncHandler(async (req, res) => {
@@ -107,7 +111,7 @@ app.put("/accounts/:id/balance", asyncHandler(async (req, res) => {
     return res.status(400).json({ error: "balance must be a non-negative number" });
   }
 
-  await setAccountBalance(accountId, balance);
+  await setAccountBalance(accountId, balance, actorOf(req));
 
   res.json(await getAccounts());
 }));
@@ -125,7 +129,7 @@ app.put("/rates", asyncHandler(async (req, res) => {
   }
 
   const newRateRequest = { ...req.body };
-  await setRate(newRateRequest);
+  await setRate(newRateRequest, actorOf(req));
 
   res.json(await getRates());
 }));
@@ -134,6 +138,10 @@ app.put("/rates", asyncHandler(async (req, res) => {
 
 app.get("/log", asyncHandler(async (req, res) => {
   res.json(await getLog());
+}));
+
+app.get("/audit", asyncHandler(async (req, res) => {
+  res.json(await getAudit());
 }));
 
 // EXCHANGE endpoint
@@ -145,7 +153,7 @@ app.post("/exchange", createIdempotencyMiddleware(), asyncHandler(async (req, re
   }
 
   const exchangeRequest = { ...req.body };
-  const exchangeResult = await exchange(exchangeRequest);
+  const exchangeResult = await exchange(exchangeRequest, actorOf(req));
 
   if (exchangeResult.ok) {
     res.status(200).json(exchangeResult);

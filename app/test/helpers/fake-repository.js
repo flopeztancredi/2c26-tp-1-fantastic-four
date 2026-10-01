@@ -2,6 +2,7 @@
 
 export function createFakeRepository({ accounts, rates }) {
   const log = [];
+  const audit = [];
 
   function findById(accountId) {
     return accounts.find((account) => account.id == accountId);
@@ -16,7 +17,8 @@ export function createFakeRepository({ accounts, rates }) {
       return rates;
     },
 
-    async setRate({ baseCurrency, counterCurrency, rate }) {
+    async setRate({ baseCurrency, counterCurrency, rate }, auditEntry) {
+      audit.push(auditEntry);
       rates[baseCurrency][counterCurrency] = rate;
       rates[counterCurrency][baseCurrency] = Number((1 / rate).toFixed(5));
     },
@@ -48,5 +50,5 @@ export function createFakeRepository({ accounts, rates }) {
     },
   };
 
-  return { repository, state: { accounts, rates, log } };
+  return { repository, state: { accounts, rates, log, audit } };
 }

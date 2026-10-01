@@ -43,10 +43,12 @@ export async function createRedisAdapter(url) {
       return accounts.find((account) => account.currency == currency);
     },
 
-    async setAccountBalance(accountId, balance) {
-      if (await client.hExists("currencies", String(accountId))) {
-        await client.hSet("balances", String(accountId), String(balance));
-      }
+    async setAccountBalance(accountId, balance, audit) {
+      await client
+        .multi()
+        .hSet("balances", String(accountId), String(balance))
+        .xAdd("audit", "*", { data: JSON.stringify(audit) })
+        .exec();
     },
 
     async getRates() {
@@ -62,15 +64,24 @@ export async function createRedisAdapter(url) {
       return rates;
     },
 
-    async setRate({ baseCurrency, counterCurrency, rate }) {
-      await client.hSet("rates", {
-        [`${baseCurrency}:${counterCurrency}`]: String(rate),
-        [`${counterCurrency}:${baseCurrency}`]: String(Number((1 / rate).toFixed(5))),
-      });
+    async setRate({ baseCurrency, counterCurrency, rate }, audit) {
+      await client
+        .multi()
+        .hSet("rates", {
+          [`${baseCurrency}:${counterCurrency}`]: String(rate),
+          [`${counterCurrency}:${baseCurrency}`]: String(Number((1 / rate).toFixed(5))),
+        })
+        .xAdd("audit", "*", { data: JSON.stringify(audit) })
+        .exec();
     },
 
     async getLog() {
       const entries = await client.xRange("log", "-", "+");
+      return entries.map((entry) => JSON.parse(entry.message.data));
+    },
+
+    async getAudit() {
+      const entries = await client.xRange("audit", "-", "+");
       return entries.map((entry) => JSON.parse(entry.message.data));
     },
 

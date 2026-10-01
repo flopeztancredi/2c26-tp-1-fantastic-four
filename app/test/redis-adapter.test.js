@@ -102,7 +102,7 @@ test("setRate also sets the reciprocal rate", { skip }, async (t) => {
   await flushRedis();
   const adapter = await adapterFor(t);
 
-  await adapter.setRate({ baseCurrency: "USD", counterCurrency: "ARS", rate: 1600 });
+  await adapter.setRate({ baseCurrency: "USD", counterCurrency: "ARS", rate: 1600 }, { action: "set-rate" });
 
   const rates = await adapter.getRates();
   assert.equal(rates.USD.ARS, 1600);
