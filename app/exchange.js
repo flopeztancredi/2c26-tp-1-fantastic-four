@@ -1,50 +1,34 @@
 import { nanoid } from "nanoid";
 
-import { init as stateInit, getAccounts as stateAccounts, getRates as stateRates, getLog as stateLog } from "./state.js";
+let repository;
 
-let accounts;
-let rates;
-let log;
-
-//call to initialize the exchange service
-export async function init() {
-  await stateInit();
-
-  accounts = stateAccounts();
-  rates = stateRates();
-  log = stateLog();
+export function init(stateRepository) {
+  repository = stateRepository;
 }
 
 //returns all internal accounts
-export function getAccounts() {
-  return accounts;
+export async function getAccounts() {
+  return repository.getAccounts();
 }
 
 //sets balance for an account
-export function setAccountBalance(accountId, balance) {
-  const account = findAccountById(accountId);
-
-  if (account != null) {
-    account.balance = balance;
-  }
+export async function setAccountBalance(accountId, balance) {
+  await repository.setAccountBalance(accountId, balance);
 }
 
 //returns all current exchange rates
-export function getRates() {
-  return rates;
+export async function getRates() {
+  return repository.getRates();
 }
 
 //returns the whole transaction log
-export function getLog() {
-  return log;
+export async function getLog() {
+  return repository.getLog();
 }
 
 //sets the exchange rate for a given pair of currencies, and the reciprocal rate as well
-export function setRate(rateRequest) {
-  const { baseCurrency, counterCurrency, rate } = rateRequest;
-
-  rates[baseCurrency][counterCurrency] = rate;
-  rates[counterCurrency][baseCurrency] = Number((1 / rate).toFixed(5));
+export async function setRate(rateRequest) {
+  await repository.setRate(rateRequest);
 }
 
 //executes an exchange operation
@@ -57,14 +41,15 @@ export async function exchange(exchangeRequest) {
     baseAmount,
   } = exchangeRequest;
 
-  //get the exchange rate
+  //get the exchange rate and our accounts on both currencies
+  const [rates, baseAccount, counterAccount] = await Promise.all([
+    repository.getRates(),
+    repository.findAccountByCurrency(baseCurrency),
+    repository.findAccountByCurrency(counterCurrency),
+  ]);
   const exchangeRate = rates[baseCurrency][counterCurrency];
   //compute the requested (counter) amount
   const counterAmount = baseAmount * exchangeRate;
-  //find our account on the provided (base) currency
-  const baseAccount = findAccountByCurrency(baseCurrency);
-  //find our account on the counter currency
-  const counterAccount = findAccountByCurrency(counterCurrency);
 
   //construct the result object with defaults
   const exchangeResult = {
@@ -77,26 +62,28 @@ export async function exchange(exchangeRequest) {
     obs: null,
   };
 
-  //check if we have funds on the counter currency account
-  if (counterAccount.balance >= counterAmount) {
+  //check and discount funds on the counter currency account
+  if (await repository.reserveBalance(counterAccount.id, counterAmount)) {
     //try to transfer from clients' base account
     if (await transfer(clientBaseAccountId, baseAccount.id, baseAmount)) {
       //try to transfer to clients' counter account
       if (
         await transfer(counterAccount.id, clientCounterAccountId, counterAmount)
       ) {
-        //all good, update balances
-        baseAccount.balance += baseAmount;
-        counterAccount.balance -= counterAmount;
+        //all good, credit our base account
+        await repository.creditBalance(baseAccount.id, baseAmount);
         exchangeResult.ok = true;
         exchangeResult.counterAmount = counterAmount;
       } else {
         //could not transfer to clients' counter account, return base amount to client
         await transfer(baseAccount.id, clientBaseAccountId, baseAmount);
+        //and give back what we reserved
+        await repository.creditBalance(counterAccount.id, counterAmount);
         exchangeResult.obs = "Could not transfer to clients' account";
       }
     } else {
-      //could not withdraw from clients' account
+      //could not withdraw from clients' account, give back what we reserved
+      await repository.creditBalance(counterAccount.id, counterAmount);
       exchangeResult.obs = "Could not withdraw from clients' account";
     }
   } else {
@@ -105,7 +92,7 @@ export async function exchange(exchangeRequest) {
   }
 
   //log the transaction and return it
-  log.push(exchangeResult);
+  await repository.appendLog(exchangeResult);
 
   return exchangeResult;
 }
@@ -117,24 +104,4 @@ async function transfer(fromAccountId, toAccountId, amount) {
   return new Promise((resolve) =>
     setTimeout(() => resolve(true), Math.random() * (max - min + 1) + min)
   );
-}
-
-function findAccountByCurrency(currency) {
-  for (let account of accounts) {
-    if (account.currency == currency) {
-      return account;
-    }
-  }
-
-  return null;
-}
-
-function findAccountById(id) {
-  for (let account of accounts) {
-    if (account.id == id) {
-      return account;
-    }
-  }
-
-  return null;
 }
