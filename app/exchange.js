@@ -1,6 +1,7 @@
 import { nanoid } from "nanoid";
 
 import { init as stateInit, getAccounts as stateAccounts, getRates as stateRates, getLog as stateLog } from "./state.js";
+import { InsufficientFundsError } from "./errors.js";
 
 let accounts;
 let rates;
@@ -121,6 +122,8 @@ export async function exchange(exchangeRequest) {
   } else {
     //not enough funds on internal counter account
     exchangeResult.obs = "Not enough funds on counter currency account";
+    log.push(exchangeResult);
+    throw new InsufficientFundsError(exchangeResult);
   }
 
   //log the transaction and return it

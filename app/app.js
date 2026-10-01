@@ -12,11 +12,12 @@ import {
   isKnownAccount,
   isSupportedPair,
 } from "./exchange.js";
+import { InsufficientFundsError } from "./errors.js";
 
 await exchangeInit();
 
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
 
 app.use(express.json());
 
@@ -121,6 +122,9 @@ app.post("/exchange", async (req, res, next) => {
 
 // errores de cualquier handler: JSON sin stack trace (el detalle queda en el log del servidor)
 app.use((err, req, res, next) => {
+  if (err instanceof InsufficientFundsError) {
+    return res.status(422).json(err.exchangeResult);
+  }
   if (err.type === "entity.parse.failed") {
     return res.status(400).json({ error: "body must be valid JSON" });
   }
@@ -133,8 +137,9 @@ process.on("unhandledRejection", (err) => {
   console.error(`[${new Date().toISOString()}] unhandled rejection:`, err);
 });
 
-app.listen(port, () => {
+const server = app.listen(port, () => {
   console.log(`Exchange API listening on port ${port}`);
 });
 
 export default app;
+export { server };
