@@ -151,6 +151,7 @@ else
     docker inspect -f '{{.Name}}: Memory={{.HostConfig.Memory}} MemorySwap={{.HostConfig.MemorySwap}} CpusetCpus={{.HostConfig.CpusetCpus}}' \
       $(replicas_api) exchange-nginx-1
     echo "ARTILLERY_CPUSET=${ARTILLERY_CPUSET:-12-15}"
+    echo "ARTILLERY=container node:24 en la red ${RED_COMPOSE:-exchange_default}, ip_local_port_range 1024-65535, tcp_tw_reuse=1, tcp_max_tw_buckets=2000"
     [ -n "${EXCHANGE_SPIKE_RATE:-}" ] && echo "EXCHANGE_SPIKE_RATE=$EXCHANGE_SPIKE_RATE"
   } > "$DIR/entorno.txt" 2>&1
   ( cd /proc/sys/net/ipv4 && grep . ip_local_port_range tcp_tw_reuse tcp_max_tw_buckets tcp_fin_timeout ) > "$DIR/red-cliente.txt"
@@ -185,13 +186,36 @@ else
   echo "$INICIO" > "$DIR/inicio.txt"
   echo "temperatura_cpu_inicio_C=$TEMP_INICIO" >> "$DIR/entorno.txt"
 fi
-# artillery en cores lentos (E), lejos de la api y de nginx (ver cpuset en docker-compose.yml)
+# artillery corre en un container de la red del compose, en cores lentos (E), lejos de la api y de
+# nginx (ver cpuset en docker-compose.yml). no en el host: cada usuario virtual abre una conexion
+# nueva, y desde el host cada una pasa por docker-proxy y deja un puerto efimero 60 s en TIME_WAIT.
+# con el rango por defecto (32768 a 60999, 28.232 puertos) y tcp_tw_reuse=2 (que solo reutiliza en
+# loopback), el host no abre mas de ~470 conexiones nuevas por segundo: el 01/10 el breakpoint de la
+# base, el de rate limiting y el de redis cortaron los tres entre 400 y 480 req/s con ECONNRESET, con
+# la api lejos de saturarse, y los reset ni llegaban a nginx. el container tiene su propio namespace
+# de red, donde se puede ampliar el rango, reutilizar TIME_WAIT y topear los sockets en TIME_WAIT
+# (2.000, como -MaxTimeWait: sin tope, en Windows el cliente se volvia a quedar sin puertos a 640
+# req/s) sin tocar el host: es el metodo de correr-breakpoint-docker.ps1. el yaml se copia al lado del original (los processor son rutas
+# relativas al yaml) con el target y el statsd de adentro de la red; el prefijo de statsd no cambia
+RED_COMPOSE=${RED_COMPOSE:-exchange_default}
+YAML_RED=".$ESCENARIO.en-red.yaml"
 if [ "$SECO" = 1 ]; then
-  echo "+ taskset -c ${ARTILLERY_CPUSET:-12-15} npx artillery run $ESCENARIO.yaml -e api --output $DIR/reporte-artillery.json"
+  echo "+ (copia $ESCENARIO.yaml a $YAML_RED con target http://nginx y statsd en graphite)"
+  echo "+ docker run --rm --network $RED_COMPOSE --cpuset-cpus ${ARTILLERY_CPUSET:-12-15} --sysctl net.ipv4.ip_local_port_range='1024 65535' --sysctl net.ipv4.tcp_tw_reuse=1 --sysctl net.ipv4.tcp_max_tw_buckets=2000 node:24 artillery run $YAML_RED -e api --output $DIR/reporte-artillery.json"
   SALIDA=0
 else
-  taskset -c "${ARTILLERY_CPUSET:-12-15}" npx artillery run "$ESCENARIO.yaml" -e api --output "$DIR/reporte-artillery.json" 2>&1 | tee "$DIR/resultados-artillery.txt"
+  sed -e "s|'http://localhost:5555'|'http://nginx'|; s|\"http://localhost:5555\"|\"http://nginx\"|; s|host: localhost|host: graphite|" "$ESCENARIO.yaml" > "$YAML_RED"
+  grep -vE "^\s*#" "$YAML_RED" | grep -q "localhost" && falla "la copia $YAML_RED sigue apuntando a localhost"
+  cp "$YAML_RED" "$DIR/escenario-en-red.yaml"
+  docker rm -f artillery-medicion > /dev/null 2>&1
+  docker run --rm --name artillery-medicion --network "$RED_COMPOSE" --cpuset-cpus "${ARTILLERY_CPUSET:-12-15}" \
+    --sysctl net.ipv4.ip_local_port_range="1024 65535" --sysctl net.ipv4.tcp_tw_reuse=1 --sysctl net.ipv4.tcp_max_tw_buckets=2000 \
+    --user "$(id -u):$(id -g)" -e HOME=/tmp -e EXCHANGE_SPIKE_RATE="${EXCHANGE_SPIKE_RATE:-}" \
+    -v "$PWD:/perf" -w /perf node:24 \
+    sh -c "grep . /proc/sys/net/ipv4/ip_local_port_range /proc/sys/net/ipv4/tcp_tw_reuse /proc/sys/net/ipv4/tcp_max_tw_buckets > '$DIR/red-artillery.txt'; exec node node_modules/.bin/artillery run '$YAML_RED' -e api --output '$DIR/reporte-artillery.json'" \
+    2>&1 | tee "$DIR/resultados-artillery.txt"
   SALIDA=${PIPESTATUS[0]}
+  rm -f "$YAML_RED"
 fi
 FIN=$(date +%s)
 TEMP_FIN=$(temp_cpu)

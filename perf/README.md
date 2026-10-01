@@ -68,7 +68,7 @@ Sin parámetros, los dos scripts corren el breakpoint.
   - **Se evita el port-forwarding de Docker Desktop** entre Windows y la VM.
   - **cadvisor mide también el consumo del generador** (container `artillery`).
 - **Costo:** el generador comparte la VM con el sistema. Si la VM se cuelga, también se cuelga el que mide.
-- En Linux los valores de red por defecto alcanzan, así que artillery corre en el host.
+- En Linux se supuso que los valores de red por defecto alcanzaban y artillery corría en el host. No alcanzan: el 01/10, con artillery en el host, los breakpoints de la base, de rate limiting y de Redis cortaron los tres entre 400 y 480 req/s con `ECONNRESET`, con la api lejos de saturarse. Cada conexión pasa por `docker-proxy` y deja un puerto efímero en TIME_WAIT 60 s; con el rango por defecto (32768 a 60999) y `tcp_tw_reuse=2`, que solo reutiliza en loopback, el host no abre más de unas 470 conexiones nuevas por segundo. Desde entonces `correr-breakpoint-linux.sh` también corre artillery en un container de `exchange_default` (imagen `node:24`, con el `node_modules` de `perf/`), con los mismos `--sysctl` que en Windows, en los CPUs de `ARTILLERY_CPUSET`.
 - Para confirmar que el límite no fue el cliente, en ninguna corrida tiene que aparecer `EADDRNOTAVAIL` ni `EADDRINUSE`.
 
 ## Replicar las corridas
