@@ -1,0 +1,64 @@
+# Lectura de tasas: 80 % GET /rates y 20 % POST /exchange a B (800 req/s). Ver GUIA_cache-tasas.md.
+config:
+  environments:
+    api:
+      target: 'http://localhost:5555'
+      plugins:
+        statsd:
+          host: localhost
+          port: 8125
+          prefix: "artillery-exchange-lectura-tasas"
+        metrics-by-endpoint:
+          useOnlyRequestNames: true
+    docker:
+      target: 'http://nginx'
+      plugins:
+        statsd:
+          host: graphite
+          port: 8125
+          prefix: "artillery-exchange-lectura-tasas-docker"
+        metrics-by-endpoint:
+          useOnlyRequestNames: true
+
+  http:
+    timeout: 10
+
+  phases:
+    - name: "Calentamiento 80 req/s"
+      duration: 30
+      arrivalRate: 80
+    - name: "Carga mixta a B (800 req/s): ~80% GET /rates, ~20% POST /exchange"
+      duration: 120
+      arrivalRate: 800
+
+scenarios:
+  - name: "Consulta de tasas (GET /rates)"
+    weight: 8
+    flow:
+      - get:
+          url: '/rates'
+          name: 'GET /rates'
+  - name: "Cambio ARS -> USD"
+    weight: 1
+    flow:
+      - post:
+          url: '/exchange'
+          name: 'POST /exchange'
+          json:
+            baseCurrency: "ARS"
+            counterCurrency: "USD"
+            baseAmount: 1000
+            baseAccountId: 101
+            counterAccountId: 102
+  - name: "Cambio USD -> ARS"
+    weight: 1
+    flow:
+      - post:
+          url: '/exchange'
+          name: 'POST /exchange'
+          json:
+            baseCurrency: "USD"
+            counterCurrency: "ARS"
+            baseAmount: 1
+            baseAccountId: 102
+            counterAccountId: 101
