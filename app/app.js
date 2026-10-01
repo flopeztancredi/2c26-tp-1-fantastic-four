@@ -17,6 +17,13 @@ const port = 3000;
 
 app.use(express.json());
 
+// HEALTH endpoint (ping/echo): answers only while the process is serving requests and the state is loaded
+
+app.get("/health", (req, res) => {
+  const ok = getAccounts() != null && getRates() != null;
+  res.status(ok ? 200 : 503).json({ status: ok ? "ok" : "state not loaded", uptime: process.uptime() });
+});
+
 // ACCOUNT endpoints
 
 app.get("/accounts", (req, res) => {
