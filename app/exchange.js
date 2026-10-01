@@ -1,6 +1,7 @@
 import { nanoid } from "nanoid";
 
 import { init as stateInit, getAccounts as stateAccounts, getRates as stateRates, getLog as stateLog, appendLog as stateAppendLog } from "./state.js";
+import { InsufficientFundsError } from "./errors.js";
 
 let accounts;
 let rates;
@@ -35,6 +36,25 @@ export function getRates() {
 //returns the whole transaction log
 export function getLog() {
   return stateLog();
+}
+
+//true if there is an internal account for the currency
+export function isKnownCurrency(currency) {
+  return findAccountByCurrency(currency) != null;
+}
+
+//true if there is an internal account with that id
+export function isKnownAccount(accountId) {
+  return findAccountById(accountId) != null;
+}
+
+//true if the pair has a numeric rate and both currencies have an internal account
+export function isSupportedPair(baseCurrency, counterCurrency) {
+  return (
+    isKnownCurrency(baseCurrency) &&
+    isKnownCurrency(counterCurrency) &&
+    Number.isFinite(rates[baseCurrency]?.[counterCurrency])
+  );
 }
 
 //sets the exchange rate for a given pair of currencies, and the reciprocal rate as well
@@ -100,6 +120,8 @@ export async function exchange(exchangeRequest) {
   } else {
     //not enough funds on internal counter account
     exchangeResult.obs = "Not enough funds on counter currency account";
+    stateAppendLog(exchangeResult);
+    throw new InsufficientFundsError(exchangeResult);
   }
 
   //log the transaction and return it
