@@ -13,13 +13,15 @@ const RATES = "./state/rates.json";
 const LOG = "./state/log.jsonl";
 const LEGACY_LOG = "./state/log.json";
 
+let saveIntervals = [];
+const pendingSaves = new Set();
+
 export async function init() {
   accounts = await load(ACCOUNTS);
   rates = await load(RATES);
   await migrateLegacyLog();
 
-  scheduleSave(accounts, ACCOUNTS, 1000);
-  scheduleSave(rates, RATES, 5000);
+  saveIntervals = [scheduleSave(accounts, ACCOUNTS, 1000), scheduleSave(rates, RATES, 5000)];
 }
 
 export function getAccounts() {
@@ -32,6 +34,13 @@ export function getRates() {
 
 export async function getLog() {
   return loadLog();
+}
+
+//saves everything once, used on shutdown
+export async function saveAll() {
+  saveIntervals.forEach(clearInterval);
+  await Promise.all(pendingSaves);
+  await Promise.all([save(accounts, ACCOUNTS), save(rates, RATES)]);
 }
 
 async function load(fileName) {
@@ -116,15 +125,17 @@ export async function appendLog(entry) {
 
 async function save(data, fileName) {
   const filePath = path.join(__dirname, fileName);
-  try {
-    await fs.promises.writeFile(filePath, JSON.stringify(data, null, 2));
-  } catch (err) {
-    console.error(`Error writing to ${filePath}:`, err);
-  }
+  const write = fs.promises
+    .writeFile(filePath, JSON.stringify(data, null, 2))
+    .catch((err) => console.error(`Error writing to ${filePath}:`, err));
+
+  pendingSaves.add(write);
+  await write;
+  pendingSaves.delete(write);
 }
 
 function scheduleSave(data, fileName, period) {
-  setInterval(async () => {
+  return setInterval(async () => {
     await save(data, fileName);
   }, period);
 }
