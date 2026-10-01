@@ -1362,6 +1362,308 @@
           "sort": "none"
         }
       }
+    },
+    {
+      "id": 25,
+      "type": "row",
+      "title": "Negocio: volumen y neto por moneda (punto de vista de arVault)",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 73
+      },
+      "panels": []
+    },
+    {
+      "id": 26,
+      "type": "timeseries",
+      "title": "$moneda: volumen y neto por intervalo",
+      "description": "Punto de vista de arVault. Compras: lo que arVault recibe en $moneda (baseAmount cuando $moneda es la moneda que entrega el cliente). Ventas: lo que arVault paga en $moneda (counterAmount). Volumen = compras + ventas. Neto = compras - ventas, igual al cambio de saldo de la cuenta de arVault en $moneda: negativo significa que arVault se está quedando sin $moneda. Cada punto es la suma de un intervalo (el que elige Grafana según el rango, mínimo 10 s). Solo cuenta cambios exitosos. En unidades de $moneda, sin convertir.",
+      "datasource": "Graphite",
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 74
+      },
+      "interval": "10s",
+      "targets": [
+        {
+          "refId": "A",
+          "target": "alias(consolidateBy(summarize(sumSeries(transformNull(stats_counts.arvault.exchange.compras.$moneda, 0), transformNull(stats_counts.arvault.exchange.ventas.$moneda, 0)), '$__interval', 'sum', false), 'sum'), 'Volumen')",
+          "textEditor": true
+        },
+        {
+          "refId": "B",
+          "target": "alias(consolidateBy(summarize(sumSeries(transformNull(stats_counts.arvault.exchange.compras.$moneda, 0), scale(transformNull(stats_counts.arvault.exchange.ventas.$moneda, 0), -1)), '$__interval', 'sum', false), 'sum'), 'Neto')",
+          "textEditor": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "showPoints": "never",
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "repeat": "moneda",
+      "repeatDirection": "h",
+      "maxPerRow": 4
+    },
+    {
+      "id": 27,
+      "type": "timeseries",
+      "title": "$moneda: volumen y neto acumulados en el rango",
+      "description": "Acumulados desde el inicio del rango de tiempo elegido en Grafana, no desde que arrancó el servicio. El neto acumulado de una corrida es igual al saldo final menos el saldo inicial de la cuenta de arVault en $moneda (lo verifica perf/conciliar-metricas.py).",
+      "datasource": "Graphite",
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 82
+      },
+      "interval": "10s",
+      "targets": [
+        {
+          "refId": "A",
+          "target": "alias(consolidateBy(integral(sumSeries(transformNull(stats_counts.arvault.exchange.compras.$moneda, 0), transformNull(stats_counts.arvault.exchange.ventas.$moneda, 0))), 'last'), 'Volumen acumulado')",
+          "textEditor": true
+        },
+        {
+          "refId": "B",
+          "target": "alias(consolidateBy(integral(sumSeries(transformNull(stats_counts.arvault.exchange.compras.$moneda, 0), scale(transformNull(stats_counts.arvault.exchange.ventas.$moneda, 0), -1))), 'last'), 'Neto acumulado')",
+          "textEditor": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "showPoints": "never",
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "repeat": "moneda",
+      "repeatDirection": "h",
+      "maxPerRow": 4
+    },
+    {
+      "id": 28,
+      "type": "timeseries",
+      "title": "Operaciones de cambio por segundo: exitosas y rechazadas",
+      "description": "Emitidas por la api. Rechazada = cambio registrado en el log con ok: false (por ejemplo, sin fondos en la cuenta de arVault). Un 400 por pedido mal formado no llega al dominio y no se cuenta. Sirven para conciliar con el log: la cantidad de exitosas en Graphite tiene que ser igual a la del log.",
+      "datasource": "Graphite",
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 90
+      },
+      "interval": "10s",
+      "targets": [
+        {
+          "refId": "A",
+          "target": "alias(transformNull(stats.arvault.exchange.operaciones.ok, 0), 'Exitosas')",
+          "textEditor": true
+        },
+        {
+          "refId": "B",
+          "target": "alias(transformNull(stats.arvault.exchange.operaciones.rechazadas, 0), 'Rechazadas')",
+          "textEditor": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "showPoints": "never",
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 29,
+      "type": "row",
+      "title": "Aplicación: vista del servidor (emitida por la api)",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 97
+      },
+      "panels": []
+    },
+    {
+      "id": 30,
+      "type": "timeseries",
+      "title": "Tiempo de respuesta en la api, vista del servidor: mediana y P90 por ruta",
+      "description": "Lo mide la api desde que llega el pedido hasta que termina de responder (timer de StatsD por ruta, agregado entre réplicas cada 10 s). No incluye la red ni nginx: la diferencia con el tiempo del lado cliente es la espera fuera de la api. StatsD calcula el percentil 90 por defecto (percentThreshold), no el 95.",
+      "datasource": "Graphite",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 98
+      },
+      "interval": "10s",
+      "targets": [
+        {
+          "refId": "A",
+          "target": "alias(stats.timers.arvault.exchange.http.POST.exchange.median, 'POST /exchange, mediana')",
+          "textEditor": true
+        },
+        {
+          "refId": "B",
+          "target": "alias(stats.timers.arvault.exchange.http.POST.exchange.upper_90, 'POST /exchange, P90')",
+          "textEditor": true
+        },
+        {
+          "refId": "C",
+          "target": "alias(stats.timers.arvault.exchange.http.GET.rates.upper_90, 'GET /rates, P90')",
+          "textEditor": true
+        },
+        {
+          "refId": "D",
+          "target": "alias(stats.timers.arvault.exchange.http.GET.accounts.upper_90, 'GET /accounts, P90')",
+          "textEditor": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "showPoints": "never",
+            "fillOpacity": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 31,
+      "type": "timeseries",
+      "title": "Respuestas de la api por código, vista del servidor (por segundo)",
+      "description": "Cada respuesta que dio la api, por código HTTP (contador de StatsD agregado entre réplicas). Separa lo que rechaza la api (400, 404, 409, 422, 500) de lo que genera nginx (429 del rate limit, 502 y 504), que acá no aparece.",
+      "datasource": "Graphite",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 98
+      },
+      "interval": "10s",
+      "targets": [
+        {
+          "refId": "A",
+          "target": "aliasByNode(stats.arvault.exchange.http.respuestas.*, 5)",
+          "textEditor": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "showPoints": "never",
+            "fillOpacity": 60,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "sum"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      }
     }
   ],
   "refresh": "10s",
@@ -1421,6 +1723,55 @@
         "label": "Containers",
         "description": "Containers a mostrar en CPU y memoria (cadvisor). Se arma solo, consultando graphite (stats.gauges.cadvisor.exchange-*): una replica nueva (--scale api=N) o exchange-redis-1 (rama tactica/redis) aparecen sin tocar el dashboard.",
         "hide": 0,
+        "skipUrlSync": false,
+        "error": null
+      },
+      {
+        "name": "moneda",
+        "label": "Moneda",
+        "type": "custom",
+        "query": "ARS,USD,EUR,BRL",
+        "description": "Monedas de las cuentas de arVault. Cada una en su propio panel: sus magnitudes difieren en órdenes y una aplastaría a la otra.",
+        "multi": true,
+        "includeAll": true,
+        "allValue": null,
+        "hide": 0,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": [
+          {
+            "selected": true,
+            "text": "All",
+            "value": "$__all"
+          },
+          {
+            "selected": false,
+            "text": "ARS",
+            "value": "ARS"
+          },
+          {
+            "selected": false,
+            "text": "USD",
+            "value": "USD"
+          },
+          {
+            "selected": false,
+            "text": "EUR",
+            "value": "EUR"
+          },
+          {
+            "selected": false,
+            "text": "BRL",
+            "value": "BRL"
+          }
+        ],
         "skipUrlSync": false,
         "error": null
       }

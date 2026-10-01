@@ -10,7 +10,7 @@ El servicio tiene un Dockerfile para poder armar una imagen de Docker y levantar
 
 ### Almacenamiento
 
-El storage de cuentas, tasas y el log se mantiene, por ahora, en unos archivos JSON. Tienen que existir 3 archivos en el directorio `./state`:
+El storage de cuentas, tasas y el log se mantiene, por ahora, en archivos dentro del directorio `./state`. Tienen que existir 2 archivos JSON (`accounts.json` y `rates.json`); el log se crea solo si no existe:
 
 `accounts.json`
 
@@ -32,9 +32,9 @@ Tiene un objeto con las tasas de cambio. Ejemplo de una tasa:
         "USD": 0.00094
     }
 
-`log.json`
+`log.jsonl`
 
-Tiene un array con el log de transacciones del sistema. Ejemplo de una entrada de log:
+Tiene el log de transacciones del sistema, una entrada JSON por línea (JSON Lines). Cada transacción se agrega al final del archivo, sin reescribirlo completo. Ejemplo de una entrada de log (formateada para que se lea mejor):
 
     {
         "id": "Uml8yqzZ4Mjgk2tKuN6mL",
@@ -117,7 +117,7 @@ Todas las operaciones se registran en un log. Ver más abajo.
 
 `GET /logs`
 
-Devuelve el log de operaciones. Este log se persiste cada 5 segundos.
+Devuelve el log de operaciones. El log se mantiene en memoria y se carga desde `log.jsonl` al iniciar; cada operación se agrega al archivo apenas se registra.
 
 ## TODO
 
